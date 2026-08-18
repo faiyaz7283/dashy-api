@@ -269,7 +269,7 @@ async def test_get_<domain>_response_format():
 ### 6. Run quality gate
 
 ```bash
-uv run ruff check app/ tests/ && uv run python -m compileall app/ && uv run pytest tests/ -v
+make lint-api && make build-api && make test-api
 ```
 
 ## Common patterns

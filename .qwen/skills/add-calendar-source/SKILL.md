@@ -422,7 +422,7 @@ def test_parse_event():
 ### 9. Run quality gate
 
 ```bash
-uv run ruff check app/ tests/ && uv run python -m compileall app/ && uv run pytest tests/ -v
+make lint-api && make build-api && make test-api
 ```
 
 ### 10. Update documentation

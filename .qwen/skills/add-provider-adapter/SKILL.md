@@ -379,7 +379,7 @@ class ProviderRegistry:
 ### 10. Run quality gate
 
 ```bash
-uv run ruff check app/ tests/ && uv run python -m compileall app/ && uv run pytest tests/ -v
+make lint-api && make build-api && make test-api
 ```
 
 ### 11. Update documentation

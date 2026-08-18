@@ -12,19 +12,19 @@ Run the full backend quality gate. All steps must pass before declaring any chan
 ### 1. Lint
 
 ```bash
-uv run ruff check app/ tests/
+make lint-api
 ```
 
 Checks for errors, style issues, and import problems. Auto-fix what's possible:
 
 ```bash
-uv run ruff check app/ tests/ --fix
+make format-api
 ```
 
 ### 2. Typecheck (compile check)
 
 ```bash
-uv run python -m compileall app/
+make build-api
 ```
 
 Verifies all Python files compile without syntax errors.
@@ -32,7 +32,7 @@ Verifies all Python files compile without syntax errors.
 ### 3. Test
 
 ```bash
-uv run pytest tests/ -v
+make test-api
 ```
 
 Runs all tests (unit, integration, API) with verbose output.
@@ -42,12 +42,12 @@ Runs all tests (unit, integration, API) with verbose output.
 Run all three steps in sequence:
 
 ```bash
-uv run ruff check app/ tests/ && uv run python -m compileall app/ && uv run pytest tests/ -v
+make lint-api && make build-api && make test-api
 ```
 
 ## Notes
 
-- This runs natively (no Docker needed) since the backend repo has UV
+- All commands run inside Docker containers via Makefile targets — ensure the dev environment is up (`make dev-up`)
 - Fix lint issues before running tests
 - Integration tests require Redis to be running (via Docker Compose in the orchestrator)
 - If integration tests fail due to Redis, ensure the dev environment is up

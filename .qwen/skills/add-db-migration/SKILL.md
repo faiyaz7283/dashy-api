@@ -41,7 +41,7 @@ class NewTable(SQLModel, table=True):
 ### 2. Generate migration
 
 ```bash
-uv run alembic revision --autogenerate -m "add_new_table"
+docker compose -f compose/docker-compose.dev.yml exec -T api alembic revision --autogenerate -m "add_new_table"
 ```
 
 This creates a new file in `alembic/versions/<hash>_add_new_table.py`.
@@ -75,24 +75,24 @@ def downgrade() -> None:
 ### 4. Apply migration
 
 ```bash
-uv run alembic upgrade head
+docker compose -f compose/docker-compose.dev.yml exec -T api alembic upgrade head
 ```
 
 Verify tables were created:
 
 ```bash
-uv run python -c "from app.core.database import sync_engine; from sqlmodel import SQLModel; print(SQLModel.metadata.tables.keys())"
+docker compose -f compose/docker-compose.dev.yml exec -T api uv run python -c "from app.core.database import sync_engine; from sqlmodel import SQLModel; print(SQLModel.metadata.tables.keys())"
 ```
 
 ### 5. Test rollback
 
 ```bash
 # Rollback one step
-uv run alembic downgrade -1
+docker compose -f compose/docker-compose.dev.yml exec -T api alembic downgrade -1
 
 # Verify table is gone
 # Then re-apply
-uv run alembic upgrade head
+docker compose -f compose/docker-compose.dev.yml exec -T api alembic upgrade head
 ```
 
 **Why test rollback?** Ensures migrations are reversible for deployment rollbacks.
@@ -145,7 +145,7 @@ async def test_new_table_crud():
 ### 8. Run quality gate
 
 ```bash
-uv run ruff check app/ tests/ && uv run python -m compileall app/ && uv run pytest tests/ -v
+make lint-api && make build-api && make test-api
 ```
 
 ## Common patterns
@@ -165,7 +165,7 @@ Generate migration — Alembic will detect the new column and add `op.add_column
 
 ```bash
 # Generate empty migration
-uv run alembic revision -m "rename_old_to_new"
+docker compose -f compose/docker-compose.dev.yml exec -T api alembic revision -m "rename_old_to_new"
 ```
 
 Manually edit the migration:

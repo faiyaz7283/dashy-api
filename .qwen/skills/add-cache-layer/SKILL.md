@@ -328,7 +328,7 @@ async def test_<domain>_caches_provider_response():
 ### 9. Run quality gate
 
 ```bash
-uv run ruff check app/ tests/ && uv run python -m compileall app/ && uv run pytest tests/ -v
+make lint-api && make build-api && make test-api
 ```
 
 ## Cache key patterns

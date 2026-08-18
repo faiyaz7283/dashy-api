@@ -178,27 +178,24 @@ Add new fixtures to `conftest.py` if they're used across multiple test files.
 
 ```bash
 # Run all tests
-uv run pytest tests/ -v
+make test-api
 
 # Run specific tier
-uv run pytest tests/unit/ -v
-uv run pytest tests/integration/ -v
-uv run pytest tests/api/ -v
+docker compose -f compose/docker-compose.dev.yml exec -T api uv run pytest tests/unit/ -v
+docker compose -f compose/docker-compose.dev.yml exec -T api uv run pytest tests/integration/ -v
+docker compose -f compose/docker-compose.dev.yml exec -T api uv run pytest tests/api/ -v
 
 # Run specific file
-uv run pytest tests/unit/test_weather_models.py -v
+docker compose -f compose/docker-compose.dev.yml exec -T api uv run pytest tests/unit/test_weather_models.py -v
 
 # Run with coverage
-uv run pytest tests/ --cov=app --cov-report=html
-
-# Run with verbose output
-uv run pytest tests/ -v
+docker compose -f compose/docker-compose.dev.yml exec -T api uv run pytest tests/ --cov=app --cov-report=html
 ```
 
 ## Step 5: Run quality gate
 
 ```bash
-uv run ruff check app/ tests/ && uv run python -m compileall app/ && uv run pytest tests/ -v
+make lint-api && make build-api && make test-api
 ```
 
 ## Test naming conventions
@@ -300,6 +297,6 @@ async def test_owm_adapter_parses_response(httpx_mock):
 
 View coverage report:
 ```bash
-uv run pytest tests/ --cov=app --cov-report=html
-open htmlcov/index.html
+docker compose -f compose/docker-compose.dev.yml exec -T api uv run pytest tests/ --cov=app --cov-report=html
+# Coverage HTML is generated inside the container; copy it out or use make dev-shell to access
 ```
