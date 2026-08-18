@@ -388,6 +388,7 @@ class TestMockWeatherAdapter:
     async def test_returns_mock_data(self):
         """MockWeatherAdapter returns mock data."""
         from app.infrastructure.weather.mock_adapter import MockWeatherAdapter
+
         adapter = MockWeatherAdapter()
         response = await adapter.get_weather()
         assert response.current is not None
@@ -397,6 +398,7 @@ class TestMockWeatherAdapter:
     async def test_mock_data_has_rich_fields(self):
         """Mock data matches 4.0 structure — all 19 days have rich fields."""
         from app.infrastructure.weather.mock_adapter import MockWeatherAdapter
+
         adapter = MockWeatherAdapter()
         response = await adapter.get_weather()
         for day in response.forecast:
@@ -410,6 +412,7 @@ class TestMockWeatherAdapter:
     async def test_mock_data_has_hourly_for_first_two_days(self):
         """Mock data has 48 hourly records split across first 2 days."""
         from app.infrastructure.weather.mock_adapter import MockWeatherAdapter
+
         adapter = MockWeatherAdapter()
         response = await adapter.get_weather()
         assert len(response.forecast[0].hourly) == 24
@@ -421,6 +424,7 @@ class TestMockWeatherAdapter:
     async def test_mock_data_units_imperial(self):
         """Mock data returns Fahrenheit by default."""
         from app.infrastructure.weather.mock_adapter import MockWeatherAdapter
+
         adapter = MockWeatherAdapter()
         response = await adapter.get_weather(units="imperial")
         assert response.current.temperature > 50  # Fahrenheit
@@ -429,6 +433,7 @@ class TestMockWeatherAdapter:
     async def test_mock_data_units_metric(self):
         """Mock data returns Celsius when requested."""
         from app.infrastructure.weather.mock_adapter import MockWeatherAdapter
+
         adapter = MockWeatherAdapter()
         response = await adapter.get_weather(units="metric")
         assert 15 < response.current.temperature < 35  # Celsius

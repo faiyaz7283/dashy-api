@@ -172,8 +172,7 @@ async def update_family_member(
         color=body.color if body.color is not None else existing.color,
         initial=body.initial if body.initial is not None else existing.initial,
         date_of_birth=(
-            body.date_of_birth if body.date_of_birth is not None
-            else existing.date_of_birth
+            body.date_of_birth if body.date_of_birth is not None else existing.date_of_birth
         ),
         relation=body.relation if body.relation is not None else existing.relation,
     )

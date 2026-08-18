@@ -55,6 +55,7 @@ async def get_calendar(
         time_min, time_max = get_default_week_dates()
 
     from app.domain.calendar.models import DateRange
+
     date_range = DateRange(start=time_min, end=time_max)
 
     # Build cache key from date range
@@ -81,8 +82,7 @@ async def get_calendar(
     # Build family members dict for quick lookup
     # Map domain FamilyMember to a dict with email and key for calendar parsing
     family_members = {
-        m.id: {"email": m.email, "key": m.id, "color": m.color}
-        for m in family_members_list
+        m.id: {"email": m.email, "key": m.id, "color": m.color} for m in family_members_list
     }
 
     # Fetch events from all family member calendars

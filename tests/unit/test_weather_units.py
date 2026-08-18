@@ -1,6 +1,5 @@
 """Tests for weather unit conversion functionality."""
 
-
 from app.infrastructure.weather.owm_adapter import celsius_to_fahrenheit, convert_temperature
 
 

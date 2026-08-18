@@ -195,6 +195,7 @@ def _build_response(
     else:
         # Should not reach here since we already checked current_data, but fallback
         from app.infrastructure.mock_data import get_mock_weather
+
         return get_mock_weather(units)
 
     # Build daily forecast
@@ -248,16 +249,12 @@ def _build_response(
                     rain=day.get("rain"),
                     snow=day.get("snow"),
                     clouds=day.get("clouds"),
-                    sunrise=(
-                        _ts_to_iso(day["sunrise"], tz_offset) if "sunrise" in day else None
-                    ),
+                    sunrise=(_ts_to_iso(day["sunrise"], tz_offset) if "sunrise" in day else None),
                     sunset=(_ts_to_iso(day["sunset"], tz_offset) if "sunset" in day else None),
                     moonrise=(
                         _ts_to_iso(day["moonrise"], tz_offset) if "moonrise" in day else None
                     ),
-                    moonset=(
-                        _ts_to_iso(day["moonset"], tz_offset) if "moonset" in day else None
-                    ),
+                    moonset=(_ts_to_iso(day["moonset"], tz_offset) if "moonset" in day else None),
                     moon_phase=day.get("moon_phase"),
                     summary=None,  # daily.summary removed in 4.0
                     hourly=day_hourly,
@@ -310,6 +307,7 @@ class OWMWeatherAdapter:
         if current_data is None:
             logger.warning("current_weather_failed", msg="falling back to mock data")
             from app.infrastructure.mock_data import get_mock_weather
+
             return get_mock_weather(units)
 
         # Step 2: Calculate start timestamp (today's midnight in local timezone)
@@ -327,6 +325,7 @@ class OWMWeatherAdapter:
         if daily_data is None and hourly_data is None:
             logger.warning("daily_hourly_failed", msg="falling back to mock data")
             from app.infrastructure.mock_data import get_mock_weather
+
             return get_mock_weather(units)
 
         return _build_response(current_data, hourly_data, daily_data, tz_offset, units)

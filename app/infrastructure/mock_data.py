@@ -407,12 +407,14 @@ def get_mock_calendar_events(
             # Create mock attendees in Google Calendar API format
             attendees = []
             for member_key in members:
-                attendees.append({
-                    "email": f"{member_key}@gmail.com",
-                    "displayName": member_key.capitalize(),
-                    "responseStatus": "accepted",
-                    "self": member_key == organizer,
-                })
+                attendees.append(
+                    {
+                        "email": f"{member_key}@gmail.com",
+                        "displayName": member_key.capitalize(),
+                        "responseStatus": "accepted",
+                        "self": member_key == organizer,
+                    }
+                )
 
             # Build event in Google Calendar API format
             event = {
