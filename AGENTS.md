@@ -5,44 +5,49 @@ It contains **hard behavior rules**, not project background. For project knowled
 
 ## 1. Docker-first development (NON-NEGOTIABLE)
 
-Dashy API is a Dockerized project. **Every** package-management, linting, type-checking, testing, and formatting command must run through `make` commands that execute inside the development containers.
+**Never run development tools directly on the host machine.** All commands must run inside Docker containers via the orchestrator's Makefile targets.
+
+### How it works
+
+- The orchestrator repo (`dashy/`) has Makefile targets that run `docker compose exec` to execute commands inside the API container
+- This API repo's local Makefile is executed **inside the container** by the orchestrator
+- Always use the orchestrator's Makefile targets (e.g., `make lint-api` from the `dashy/` directory)
 
 ### Forbidden on the host
 
-Never run these directly on the local machine, even if they appear to "work" or the container command fails:
+Never run these directly on the local machine:
 
-- `pip`, `pip3`, `python`, `python3`
 - `uv` (except `uv` itself as a system tool; never `uv pip install`, `uv run`, `uv sync` against the local filesystem)
+- `pip`, `pip3`, `python`, `python3`
 - `ruff`, `pytest`, `mypy`
-- Ad-hoc `docker compose exec ...` should only be used inside the provided Makefile targets
+- This repo's local `make` targets (they're designed to run inside the container)
 
 ### Approved commands
 
-Use these `make` targets instead:
+Use the orchestrator's `make` targets (from the `dashy/` directory):
 
 | Task | Command |
 |------|---------|
-| Install deps | `make install` |
-| Add package | `make add PACKAGE=<name>` |
-| Remove package | `make remove PACKAGE=<name>` |
-| Lint | `make lint` |
-| Format | `make format` |
-| Type check | `make typecheck` |
-| Run tests | `make test` |
-| Build | `make build` |
+| Install deps | `make install-api` |
+| Add package | `make add-api PACKAGE=<name>` |
+| Remove package | `make remove-api PACKAGE=<name>` |
+| Lint | `make lint-api` |
+| Format | `make format-api` |
+| Type check | `make typecheck` (runs kiosk only; API has no separate typecheck) |
+| Run tests | `make test-api` |
+| Build | `make build-api` |
 
-If a command you want is missing from the Makefile, add a target there — do not bypass it.
+If a command you want is missing from the orchestrator's Makefile, add a target there — do not bypass Docker.
 
 ## 2. Verify before declaring done
 
-For any backend change:
+For any backend change (run from the orchestrator `dashy/` directory):
 
-1. `make lint`
-2. `make typecheck`
-3. `make test`
-4. `make build`
+1. `make lint-api`
+2. `make test-api`
+3. `make build-api`
 
-All four must pass before you tell the user the task is complete.
+All three must pass before you tell the user the task is complete. (API has no separate typecheck target.)
 
 ## 3. Git workflow
 
@@ -50,7 +55,7 @@ All four must pass before you tell the user the task is complete.
 - Do not run `git commit`, `git push`, `git reset`, `git rebase`, or other git mutations unless the user explicitly asks.
 - Ask for confirmation before each git mutation, even if confirmed earlier in the conversation.
 - Keep commits atomic and write messages that describe "why," not just "what."
-- Include `Co-Authored-By: Oz <oz-agent@warp.dev>` in AI-assisted commits.
+- Include `Co-Authored-By: Qwen <noreply@qwen.ai>` in AI-assisted commits.
 
 ## 4. Backend code standards
 
@@ -75,7 +80,7 @@ All four must pass before you tell the user the task is complete.
 
 - Match the existing file's style, naming, and comment density.
 - Minimal changes. No opportunistic refactors.
-- Ruff rules are enforced via pre-commit hooks; `make lint` must pass.
+- Ruff enforced via `make lint` / `make format`.
 
 ## 7. Universal coding standards
 
