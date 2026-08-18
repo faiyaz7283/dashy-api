@@ -435,12 +435,14 @@ def get_mock_calendar_events(
             }
 
             # Add start/end times in Google Calendar API format
+            # Google Calendar API returns datetime strings with timezone designators
+            # Use "Z" suffix to match production format exactly
             if all_day:
                 event["start"] = {"date": event_start.strftime("%Y-%m-%d")}
                 event["end"] = {"date": event_end.strftime("%Y-%m-%d")}
             else:
-                event["start"] = {"dateTime": event_start.strftime("%Y-%m-%dT%H:%M:%S")}
-                event["end"] = {"dateTime": event_end.strftime("%Y-%m-%dT%H:%M:%S")}
+                event["start"] = {"dateTime": event_start.strftime("%Y-%m-%dT%H:%M:%S") + "Z"}
+                event["end"] = {"dateTime": event_end.strftime("%Y-%m-%dT%H:%M:%S") + "Z"}
 
             # Add recurrence rule if present
             if recurrence:
