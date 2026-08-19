@@ -134,7 +134,7 @@ class GoogleCalendarAdapter:
                     timeMin=time_min.isoformat() + "Z",
                     timeMax=time_max.isoformat() + "Z",
                     singleEvents=False,
-                    orderBy="startTime",
+                    orderBy="updated",
                 )
                 .execute()
             )
