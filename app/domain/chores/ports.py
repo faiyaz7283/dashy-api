@@ -1,0 +1,166 @@
+"""Chores domain ports (interfaces).
+
+Defines the contracts for chores data access.
+"""
+
+from typing import Protocol
+
+from app.domain.chores.models import (
+    ChoreCategory,
+    ChoreInstance,
+    ChoreTag,
+    MasterChore,
+)
+
+
+class ChoresRepository(Protocol):
+    """Protocol for chores data access.
+
+    Implementations provide access to chore data from various sources
+    (database, mock data, etc.).
+    """
+
+    async def get_categories(self) -> list[ChoreCategory]:
+        """Retrieve all chore categories.
+
+        Returns:
+            List of all chore categories.
+        """
+        ...
+
+    async def create_category(self, name: str) -> ChoreCategory:
+        """Create a new chore category.
+
+        Args:
+            name: Category display name.
+
+        Returns:
+            The newly created category.
+        """
+        ...
+
+    async def get_tags(self) -> list[ChoreTag]:
+        """Retrieve all chore tags.
+
+        Returns:
+            List of all chore tags.
+        """
+        ...
+
+    async def create_tag(self, name: str) -> ChoreTag:
+        """Create a new chore tag.
+
+        Args:
+            name: Tag display name.
+
+        Returns:
+            The newly created tag.
+        """
+        ...
+
+    async def get_master_chores(self, include_archived: bool = False) -> list[MasterChore]:
+        """Retrieve master chore templates.
+
+        Args:
+            include_archived: Whether to include soft-deleted masters.
+
+        Returns:
+            List of master chores.
+        """
+        ...
+
+    async def get_master_chore_by_id(self, chore_id: str) -> MasterChore | None:
+        """Retrieve a single master chore by ID.
+
+        Args:
+            chore_id: Unique identifier for the master chore.
+
+        Returns:
+            MasterChore if found, None otherwise.
+        """
+        ...
+
+    async def create_master_chore(self, chore: MasterChore, tag_ids: list[str]) -> MasterChore:
+        """Create a new master chore with tag associations.
+
+        Args:
+            chore: MasterChore entity to persist.
+            tag_ids: List of tag IDs to associate.
+
+        Returns:
+            The newly created master chore.
+        """
+        ...
+
+    async def update_master_chore(self, chore_id: str, updates: dict) -> MasterChore:
+        """Update a master chore with the given fields.
+
+        Args:
+            chore_id: Unique identifier for the master chore.
+            updates: Dictionary of field names to new values.
+
+        Returns:
+            The updated master chore.
+        """
+        ...
+
+    async def delete_master_chore(self, chore_id: str) -> None:
+        """Soft-delete a master chore by setting deleted_at.
+
+        Args:
+            chore_id: Unique identifier for the master chore.
+        """
+        ...
+
+    async def get_instances(self, master_chore_id: str | None = None) -> list[ChoreInstance]:
+        """Retrieve chore instances, optionally filtered by master chore.
+
+        Args:
+            master_chore_id: If provided, only return instances for this master.
+
+        Returns:
+            List of chore instances.
+        """
+        ...
+
+    async def get_instance_by_id(self, instance_id: str) -> ChoreInstance | None:
+        """Retrieve a single chore instance by ID.
+
+        Args:
+            instance_id: Unique identifier for the instance.
+
+        Returns:
+            ChoreInstance if found, None otherwise.
+        """
+        ...
+
+    async def create_instance(self, instance: ChoreInstance) -> ChoreInstance:
+        """Create a new chore instance.
+
+        Args:
+            instance: ChoreInstance entity to persist.
+
+        Returns:
+            The newly created instance.
+        """
+        ...
+
+    async def update_instance(self, instance_id: str, updates: dict) -> ChoreInstance:
+        """Update a chore instance with the given fields.
+
+        Args:
+            instance_id: Unique identifier for the instance.
+            updates: Dictionary of field names to new values.
+
+        Returns:
+            The updated instance.
+        """
+        ...
+
+    async def delete_instance(self, instance_id: str) -> None:
+        """Delete a chore instance permanently.
+
+        Args:
+            instance_id: Unique identifier for the instance.
+        """
+        ...

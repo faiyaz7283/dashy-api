@@ -4,7 +4,7 @@ Backend API for the Dashy Family Calendar Dashboard.
 
 ## Overview
 
-Dashy API provides REST endpoints for weather data, calendar events, and family member management. Built with FastAPI, designed for the Dashy kiosk display system.
+Dashy API provides REST endpoints for weather data, calendar events, family member management, and chore tracking. Built with FastAPI, designed for the Dashy kiosk display system.
 
 ## Tech Stack
 
@@ -22,6 +22,10 @@ Dashy API provides REST endpoints for weather data, calendar events, and family 
 GET /api/v1/weather?units=imperial     → WeatherResponse
 GET /api/v1/calendar?start_date=...&end_date=...  → WeekCalendar
 GET /api/v1/family                     → FamilyMember[]
+GET /api/v1/chores/masters             → ChoreMaster[]
+GET /api/v1/chores/instances           → ChoreInstance[]
+GET /api/v1/chores/categories          → ChoreCategory[]
+POST /api/v1/chores/instances/{id}/complete → ChoreInstance
 GET /health                            → { status, version, cache }
 ```
 
@@ -35,9 +39,19 @@ This repo is designed to run as part of the Dashy orchestrator (docker compose).
 
 ```bash
 # From the orchestrator repo (dashy/)
-make dev-up
+make dev-up  # Automatically applies database migrations
 
 # API docs: https://api.dashy.local/docs
+```
+
+**Important:** All commands inside the API container must use `uv run` prefix to ensure the correct Python environment:
+
+```bash
+# Inside container (via docker compose exec or make dev-shell)
+uv run pytest
+uv run ruff check .
+uv run alembic upgrade head
+uv run python -c "..."
 ```
 
 ### Standalone Development
@@ -69,6 +83,10 @@ app/
 ├── main.py              # FastAPI app entry point
 ├── core/                # Config, DI container, registry
 ├── domain/              # Domain models, protocols, value objects
+│   ├── weather/         # Weather domain
+│   ├── calendar/        # Calendar domain
+│   ├── family/          # Family member domain
+│   └── chores/          # Chore tracking domain (masters, instances, categories)
 ├── infrastructure/      # External service adapters (weather, calendar)
 ├── api/                 # HTTP routes, request/response models
 └── registry.py          # Single source of truth for endpoints
@@ -91,8 +109,29 @@ See `env/.env.dev.example` in the orchestrator repo for required variables:
 - `REDIS_URL` — Redis connection string
 - `DATABASE_URL` — SQLite database path
 - `CORS_ORIGINS` — Allowed CORS origins
+- `CHORES_USE_MOCK` — Use mock chore repository (true/false)
+
+## Database Architecture
+
+**Development:** SQLite database at `/app/data/dashy.db` on Docker volume `api-data` (not git-tracked).
+
+**Production:** Separate database on Pi's Docker volume, configured via `DATABASE_URL` in production `.env`.
+
+**Testing:** Isolated `test.db` created by `tests/conftest.py` — tests never modify the dev database.
+
+**Migrations:** Alembic manages schema changes. Migrations run automatically on `make dev-up` via `entrypoint.sh`. Manual migration commands:
+
+```bash
+make migrate              # Apply pending migrations
+make migrate-status       # Show current migration status
+make migrate-check        # Check if migrations are pending
+make migrate-rollback     # Rollback last migration
+make migrate-create MESSAGE="description"  # Generate new migration
+```
 
 ## Testing
+
+**Test isolation:** Tests use a separate `test.db` database (not the dev `dashy.db`). This is configured in `tests/conftest.py` by setting `DATABASE_URL` before any imports, ensuring tests never modify the development database.
 
 ```bash
 # Run all tests

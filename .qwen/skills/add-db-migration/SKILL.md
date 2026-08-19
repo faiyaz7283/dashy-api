@@ -13,6 +13,22 @@ Workflow for creating and applying Alembic database migrations.
 - Alembic is configured (`alembic.ini` + `alembic/` directory exist)
 - Database URL is set in environment (`DATABASE_URL` env var or default `sqlite+aiosqlite:///./dashy.db`)
 
+## Migration automation
+
+**Migrations run automatically** on `make dev-up` via `entrypoint.sh`. The `make sync` target also applies migrations if the dev environment is running.
+
+**Manual migration commands** (from orchestrator `dashy/` directory):
+
+```bash
+make migrate              # Apply pending migrations
+make migrate-status       # Show current migration status
+make migrate-check        # Check if migrations are pending
+make migrate-rollback     # Rollback last migration
+make migrate-create MESSAGE="description"  # Generate new migration
+```
+
+These targets wrap `docker compose exec` commands with `uv run` prefix for correct environment setup.
+
 ## Steps
 
 ### 1. Add or modify SQLModel
@@ -41,10 +57,16 @@ class NewTable(SQLModel, table=True):
 ### 2. Generate migration
 
 ```bash
-docker compose -f compose/docker-compose.dev.yml exec -T api alembic revision --autogenerate -m "add_new_table"
+# From orchestrator dashy/ directory
+make migrate-create MESSAGE="add_new_table"
 ```
 
 This creates a new file in `alembic/versions/<hash>_add_new_table.py`.
+
+**Alternative** (direct command inside container):
+```bash
+docker compose -f compose/docker-compose.dev.yml exec -T api uv run alembic revision --autogenerate -m "add_new_table"
+```
 
 ### 3. Review generated migration
 
@@ -75,7 +97,13 @@ def downgrade() -> None:
 ### 4. Apply migration
 
 ```bash
-docker compose -f compose/docker-compose.dev.yml exec -T api alembic upgrade head
+# From orchestrator dashy/ directory
+make migrate
+```
+
+**Alternative** (direct command inside container):
+```bash
+docker compose -f compose/docker-compose.dev.yml exec -T api uv run alembic upgrade head
 ```
 
 Verify tables were created:
@@ -87,12 +115,22 @@ docker compose -f compose/docker-compose.dev.yml exec -T api uv run python -c "f
 ### 5. Test rollback
 
 ```bash
-# Rollback one step
-docker compose -f compose/docker-compose.dev.yml exec -T api alembic downgrade -1
+# From orchestrator dashy/ directory
+make migrate-rollback
 
 # Verify table is gone
 # Then re-apply
-docker compose -f compose/docker-compose.dev.yml exec -T api alembic upgrade head
+make migrate
+```
+
+**Alternative** (direct command inside container):
+```bash
+# Rollback one step
+docker compose -f compose/docker-compose.dev.yml exec -T api uv run alembic downgrade -1
+
+# Verify table is gone
+# Then re-apply
+docker compose -f compose/docker-compose.dev.yml exec -T api uv run alembic upgrade head
 ```
 
 **Why test rollback?** Ensures migrations are reversible for deployment rollbacks.
@@ -164,8 +202,13 @@ Generate migration — Alembic will detect the new column and add `op.add_column
 ### Renaming a table or column
 
 ```bash
-# Generate empty migration
-docker compose -f compose/docker-compose.dev.yml exec -T api alembic revision -m "rename_old_to_new"
+# From orchestrator dashy/ directory
+make migrate-create MESSAGE="rename_old_to_new"
+```
+
+**Alternative** (direct command inside container):
+```bash
+docker compose -f compose/docker-compose.dev.yml exec -T api uv run alembic revision -m "rename_old_to_new"
 ```
 
 Manually edit the migration:
@@ -207,4 +250,10 @@ Alembic will generate `op.create_foreign_key()`.
 
 ## Database persistence
 
-**Important:** SQLite database file should be volume-mounted when running in Docker to persist across container restarts. Configure `DATABASE_URL` in `.env` accordingly.
+**Development:** SQLite database at `/app/data/dashy.db` on Docker volume `api-data` (not git-tracked).
+
+**Production:** Separate database on Pi's Docker volume, configured via `DATABASE_URL` in production `.env`.
+
+**Testing:** Isolated `test.db` created by `tests/conftest.py` — tests never modify the dev database.
+
+**Important:** Database files are not git-tracked (`.gitignore` excludes `*.db`). Configure `DATABASE_URL` in `.env` appropriately for each environment.

@@ -21,6 +21,18 @@ Workflow for adding tests following Dashy's three-tier testing strategy.
 - Review existing tests for patterns: `tests/conftest.py` for shared fixtures
 - pytest config: `asyncio_mode = auto` in `pyproject.toml`
 
+## Test isolation
+
+**Tests use a separate `test.db` database** (not the dev `dashy.db`). This is configured in `tests/conftest.py` by setting `DATABASE_URL` **before any imports**, ensuring tests never modify the development database.
+
+The setup order in `conftest.py` is critical:
+1. Set `DATABASE_URL` environment variable to point to `test.db`
+2. Import application modules (which read `DATABASE_URL` at import time)
+3. Create tables and run tests
+4. Clean up `test.db` after tests complete
+
+**Never modify this setup order** — it ensures complete isolation between dev and test databases.
+
 ## Step 1: Determine test tier
 
 **Unit test** if:
@@ -176,11 +188,13 @@ Add new fixtures to `conftest.py` if they're used across multiple test files.
 
 ## Step 4: Run tests
 
+**Important:** All commands inside the API container must use `uv run` prefix to ensure the correct Python environment.
+
 ```bash
-# Run all tests
+# Run all tests (from orchestrator dashy/ directory)
 make test-api
 
-# Run specific tier
+# Run specific tier (from orchestrator dashy/ directory)
 docker compose -f compose/docker-compose.dev.yml exec -T api uv run pytest tests/unit/ -v
 docker compose -f compose/docker-compose.dev.yml exec -T api uv run pytest tests/integration/ -v
 docker compose -f compose/docker-compose.dev.yml exec -T api uv run pytest tests/api/ -v
@@ -191,6 +205,8 @@ docker compose -f compose/docker-compose.dev.yml exec -T api uv run pytest tests
 # Run with coverage
 docker compose -f compose/docker-compose.dev.yml exec -T api uv run pytest tests/ --cov=app --cov-report=html
 ```
+
+**Inside container** (via `make dev-shell`): Always use `uv run pytest`, not just `pytest`.
 
 ## Step 5: Run quality gate
 
@@ -300,3 +316,5 @@ View coverage report:
 docker compose -f compose/docker-compose.dev.yml exec -T api uv run pytest tests/ --cov=app --cov-report=html
 # Coverage HTML is generated inside the container; copy it out or use make dev-shell to access
 ```
+
+**Remember:** Always use `uv run` prefix for all commands inside the API container.

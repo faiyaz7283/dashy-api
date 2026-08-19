@@ -13,6 +13,20 @@ It contains **hard behavior rules**, not project background. For project knowled
 - This API repo's local Makefile is executed **inside the container** by the orchestrator
 - Always use the orchestrator's Makefile targets (e.g., `make lint-api` from the `dashy/` directory)
 
+### uv run pattern
+
+**All commands inside the API container must use `uv run` prefix** to ensure the correct Python environment:
+
+```bash
+# Inside container (via docker compose exec or make dev-shell)
+uv run pytest                    # NOT: pytest
+uv run ruff check .              # NOT: ruff check .
+uv run alembic upgrade head      # NOT: alembic upgrade head
+uv run python -c "..."           # NOT: python -c "..."
+```
+
+This ensures commands use the virtual environment managed by UV, not system Python.
+
 ### Forbidden on the host
 
 Never run these directly on the local machine:
@@ -76,6 +90,31 @@ All three must pass before you tell the user the task is complete. (API has no s
 - **Defense-in-depth validation** — clear rules for where validation lives.
 - **RFC 9457 error handling** — standard error format for API responses.
 
+### Domain modules
+
+- **weather** — Weather data fetching and caching
+- **calendar** — Google Calendar integration
+- **family** — Family member management
+- **chores** — Chore tracking (masters, instances, categories, assignment, completion)
+
+### Database architecture
+
+**Development:** SQLite at `/app/data/dashy.db` on Docker volume `api-data` (not git-tracked).
+
+**Production:** Separate database on Pi's Docker volume, configured via `DATABASE_URL` in production `.env`.
+
+**Testing:** Isolated `test.db` created by `tests/conftest.py` — tests never modify the dev database.
+
+**Migrations:** Alembic manages schema changes. Migrations run automatically on `make dev-up` via `entrypoint.sh`. Manual migration commands:
+
+```bash
+make migrate              # Apply pending migrations
+make migrate-status       # Show current migration status
+make migrate-check        # Check if migrations are pending
+make migrate-rollback     # Rollback last migration
+make migrate-create MESSAGE="description"  # Generate new migration
+```
+
 ## 6. Code style
 
 - Match the existing file's style, naming, and comment density.
@@ -128,6 +167,18 @@ These standards apply to **all code** in the project. Every agent must follow th
 - **pytest-httpx** for mocking external HTTP calls
 - Tests live in `tests/` mirroring the `app/` structure
 - All new features need tests before declaring done
+
+### Test isolation
+
+**Tests use a separate `test.db` database** (not the dev `dashy.db`). This is configured in `tests/conftest.py` by setting `DATABASE_URL` **before any imports**, ensuring tests never modify the development database.
+
+The setup order in `conftest.py` is critical:
+1. Set `DATABASE_URL` environment variable to point to `test.db`
+2. Import application modules (which read `DATABASE_URL` at import time)
+3. Create tables and run tests
+4. Clean up `test.db` after tests complete
+
+Never modify this setup order — it ensures complete isolation between dev and test databases.
 
 ## 9. When in doubt
 

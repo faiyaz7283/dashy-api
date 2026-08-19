@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     # Calendar
     CALENDAR_USE_MOCK: bool = False
 
+    # Chores
+    CHORES_USE_MOCK: bool = False
+
     # Family
     FAMILY_MEMBERS: str = (
         '[{"name":"Test User","key":"test","email":"test@example.com","color":"#FF0000"}]'

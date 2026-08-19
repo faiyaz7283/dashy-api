@@ -10,7 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import calendar, family, weather
+from app.api.routes import calendar, chores, family, weather
 from app.config import settings
 from app.core.cache import close_cache, get_cache
 from app.core.exceptions import DashyError
@@ -87,6 +87,7 @@ async def dashy_error_handler(request: Request, exc: DashyError) -> JSONResponse
 app.include_router(weather.router, prefix="/api/v1")
 app.include_router(calendar.router, prefix="/api/v1")
 app.include_router(family.router, prefix="/api/v1")
+app.include_router(chores.router, prefix="/api/v1")
 
 
 @app.get("/health")

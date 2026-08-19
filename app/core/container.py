@@ -12,11 +12,15 @@ from app.config import settings
 from app.core.cache import Cache, get_cache
 from app.core.database import get_async_session_factory
 from app.domain.calendar.ports import CalendarProvider
+from app.domain.chores.ports import ChoresRepository
+from app.domain.chores.services import ChoresService
 from app.domain.family.ports import FamilyRepository
 from app.domain.family.services import FamilyService
 from app.domain.weather.ports import WeatherProvider
 from app.infrastructure.calendar.google_adapter import GoogleCalendarAdapter
 from app.infrastructure.calendar.mock_adapter import MockCalendarAdapter
+from app.infrastructure.chores.mock_adapter import MockChoresRepository
+from app.infrastructure.persistence.chores_repository import ChoresRepositoryImpl
 from app.infrastructure.persistence.family_repository import FamilyRepositoryImpl
 from app.infrastructure.weather.mock_adapter import MockWeatherAdapter
 from app.infrastructure.weather.owm_adapter import OWMWeatherAdapter
@@ -81,6 +85,38 @@ async def get_family_service(
         FamilyService instance.
     """
     return FamilyService(repository=family_repository)
+
+
+async def get_chores_repository() -> ChoresRepository:
+    """Get the chores repository based on configuration.
+
+    Returns MockChoresAdapter if CHORES_USE_MOCK is True,
+    otherwise returns ChoresRepositoryImpl with a fresh database session.
+    """
+    if settings.CHORES_USE_MOCK:
+        yield MockChoresRepository()
+        return
+
+    async_session_factory = get_async_session_factory()
+    session = async_session_factory()
+    try:
+        yield ChoresRepositoryImpl(session)
+    finally:
+        await session.close()
+
+
+async def get_chores_service(
+    chores_repository: ChoresRepository = Depends(get_chores_repository),
+) -> ChoresService:
+    """Get the chores service wrapping the repository.
+
+    Args:
+        chores_repository: Injected chores repository.
+
+    Returns:
+        ChoresService instance.
+    """
+    return ChoresService(repository=chores_repository)
 
 
 async def get_redis_cache() -> Cache:
