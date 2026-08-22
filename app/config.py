@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     )
 
     # CORS
-    CORS_ORIGINS: str = "https://dashy.local,http://localhost:3000,http://dashy.local"
+    CORS_ORIGINS: str = "https://dashy.local,https://dashy-v2.local,http://localhost:3000,http://dashy.local"
 
     # Database
     DATABASE_URL: str = "sqlite+aiosqlite:///./dashy.db"
