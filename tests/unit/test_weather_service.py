@@ -1,7 +1,6 @@
 """Tests for weather adapter and parsing functions."""
 
 from datetime import UTC, datetime, timedelta
-from datetime import timezone as dt_timezone
 
 import pytest
 
@@ -72,19 +71,20 @@ class TestMapIcon:
 
 class TestTimestampHelpers:
     def test_ts_to_iso(self):
-        # 2026-08-11 06:12:00 UTC → EDT (-4h) = 02:12
+        # 2026-08-11 06:12:00 UTC
         ts = 1754892720  # some fixed timestamp
-        result = _ts_to_iso(ts, tz_offset=-14400)
-        assert result == "02:12"
+        result = _ts_to_iso(ts)
+        assert result == "06:12"  # UTC time
 
     def test_ts_to_datetime(self):
         ts = 1754892720
-        result = _ts_to_datetime(ts, tz_offset=-14400)
-        assert result.startswith("2025-08-11T02:12:00")
+        result = _ts_to_datetime(ts)
+        assert result.startswith("2025-08-11T06:12:00")
+        assert result.endswith("+00:00")  # UTC offset
 
     def test_ts_to_date(self):
         ts = 1754892720
-        result = _ts_to_date(ts, tz_offset=-14400)
+        result = _ts_to_date(ts)
         assert result == "2025-08-11"
 
 
@@ -92,27 +92,12 @@ class TestTimestampHelpers:
 
 
 class TestTodayMidnightTimestamp:
-    def test_returns_midnight_in_local_tz(self):
-        tz_offset = -14400  # EDT
-        ts = _get_today_midnight_timestamp(tz_offset)
-        local_tz = dt_timezone(timedelta(seconds=tz_offset))
-        dt = datetime.fromtimestamp(ts, tz=local_tz)
+    def test_returns_midnight_in_utc(self):
+        ts = _get_today_midnight_timestamp()
+        dt = datetime.fromtimestamp(ts, tz=UTC)
         assert dt.hour == 0
         assert dt.minute == 0
         assert dt.second == 0
-
-    def test_different_tz_offsets(self):
-        # UTC
-        ts_utc = _get_today_midnight_timestamp(0)
-        utc_tz = UTC
-        dt_utc = datetime.fromtimestamp(ts_utc, tz=utc_tz)
-        assert dt_utc.hour == 0
-
-        # JST (+9h)
-        ts_jst = _get_today_midnight_timestamp(32400)
-        jst_tz = dt_timezone(timedelta(seconds=32400))
-        dt_jst = datetime.fromtimestamp(ts_jst, tz=jst_tz)
-        assert dt_jst.hour == 0
 
 
 # ── _parse_hourly_from_data ───────────────────────────
@@ -148,7 +133,7 @@ class TestParseHourlyFromData:
 
         with patch("app.infrastructure.weather.owm_adapter._ts_to_date") as mock_date:
             mock_date.side_effect = ["2026-08-11", "2026-08-12"]
-            result = _parse_hourly_from_data(hourly_data, "2026-08-11", tz_offset=-14400)
+            result = _parse_hourly_from_data(hourly_data, "2026-08-11")
             assert len(result) == 1
             assert result[0].temperature == pytest.approx(68.0, abs=0.1)  # 20°C → 68°F
 
@@ -168,9 +153,7 @@ class TestParseHourlyFromData:
         from unittest.mock import patch
 
         with patch("app.infrastructure.weather.owm_adapter._ts_to_date", return_value="2026-08-11"):
-            result = _parse_hourly_from_data(
-                hourly_data, "2026-08-11", tz_offset=-14400, units="imperial"
-            )
+            result = _parse_hourly_from_data(hourly_data, "2026-08-11", units="imperial")
             assert result[0].temperature == pytest.approx(77.0, abs=0.1)
 
     def test_returns_empty_for_no_match(self):
@@ -189,7 +172,7 @@ class TestParseHourlyFromData:
         from unittest.mock import patch
 
         with patch("app.infrastructure.weather.owm_adapter._ts_to_date", return_value="2026-08-12"):
-            result = _parse_hourly_from_data(hourly_data, "2026-08-11", tz_offset=-14400)
+            result = _parse_hourly_from_data(hourly_data, "2026-08-11")
             assert len(result) == 0
 
 
@@ -202,20 +185,19 @@ class TestBuildResponse:
     @pytest.fixture
     def sample_4_0_data(self):
         """Minimal 4.0-shaped API response dicts."""
-        tz_offset = -14400
-        now = datetime.now(dt_timezone(timedelta(seconds=tz_offset)))
+        now = datetime.now(UTC)
         today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
         current = {
             "lat": 40.71,
             "lon": -73.51,
-            "timezone": "America/New_York",
-            "timezone_offset": tz_offset,
+            "timezone": "UTC",
+            "timezone_offset": 0,
             "data": [
                 {
                     "dt": int(now.timestamp()),
-                    "sunrise": int(now.replace(hour=6, minute=12).timestamp()),
-                    "sunset": int(now.replace(hour=19, minute=48).timestamp()),
+                    "sunrise": int(now.replace(hour=10, minute=12).timestamp()),
+                    "sunset": int(now.replace(hour=23, minute=48).timestamp()),
                     "temp": 25.5,
                     "feels_like": 26.7,
                     "pressure": 1015.0,
@@ -242,10 +224,10 @@ class TestBuildResponse:
             daily.append(
                 {
                     "dt": int(day.timestamp()),
-                    "sunrise": int(day.replace(hour=6, minute=12).timestamp()),
-                    "sunset": int(day.replace(hour=19, minute=48).timestamp()),
-                    "moonrise": int(day.replace(hour=7, minute=0).timestamp()),
-                    "moonset": int(day.replace(hour=20, minute=0).timestamp()),
+                    "sunrise": int(day.replace(hour=10, minute=12).timestamp()),
+                    "sunset": int(day.replace(hour=23, minute=48).timestamp()),
+                    "moonrise": int(day.replace(hour=11, minute=0).timestamp()),
+                    "moonset": int(day.replace(hour=22, minute=0).timestamp()),
                     "moon_phase": 0.75,
                     "temp": {
                         "day": 25.0,
@@ -298,17 +280,17 @@ class TestBuildResponse:
                 }
             )
 
-        return current, hourly, daily, tz_offset
+        return current, hourly, daily
 
     def test_returns_19_days_forecast(self, sample_4_0_data):
-        current, hourly, daily, tz_offset = sample_4_0_data
-        response = _build_response(current, hourly, daily, tz_offset)
+        current, hourly, daily = sample_4_0_data
+        response = _build_response(current, hourly, daily)
         assert len(response.forecast) == 19
 
     def test_all_days_have_rich_fields(self, sample_4_0_data):
         """Every day in the 19-day forecast has rich 4.0 fields."""
-        current, hourly, daily, tz_offset = sample_4_0_data
-        response = _build_response(current, hourly, daily, tz_offset)
+        current, hourly, daily = sample_4_0_data
+        response = _build_response(current, hourly, daily)
         for day in response.forecast:
             assert day.feels_like_day is not None
             assert day.feels_like_night is not None
@@ -324,8 +306,8 @@ class TestBuildResponse:
 
     def test_hourly_data_only_for_first_two_days(self, sample_4_0_data):
         """Hourly breakdown only populated for days 1-2 (48 hours)."""
-        current, hourly, daily, tz_offset = sample_4_0_data
-        response = _build_response(current, hourly, daily, tz_offset)
+        current, hourly, daily = sample_4_0_data
+        response = _build_response(current, hourly, daily)
         # First 2 days should have hourly data
         assert len(response.forecast[0].hourly) == 24
         assert len(response.forecast[1].hourly) == 24
@@ -334,8 +316,8 @@ class TestBuildResponse:
             assert day.hourly == []
 
     def test_current_weather_fields(self, sample_4_0_data):
-        current, hourly, daily, tz_offset = sample_4_0_data
-        response = _build_response(current, hourly, daily, tz_offset)
+        current, hourly, daily = sample_4_0_data
+        response = _build_response(current, hourly, daily)
         assert response.current.temperature == pytest.approx(77.9, abs=0.1)  # 25.5°C → °F
         assert response.current.condition == "clear"
         assert response.current.humidity == 55
@@ -343,14 +325,14 @@ class TestBuildResponse:
 
     def test_pressure_is_float(self, sample_4_0_data):
         """API returns pressure as float, model accepts it."""
-        current, hourly, daily, tz_offset = sample_4_0_data
-        response = _build_response(current, hourly, daily, tz_offset)
+        current, hourly, daily = sample_4_0_data
+        response = _build_response(current, hourly, daily)
         assert isinstance(response.current.pressure, float)
 
     def test_summary_is_none(self, sample_4_0_data):
         """daily.summary removed in 4.0, should be None."""
-        current, hourly, daily, tz_offset = sample_4_0_data
-        response = _build_response(current, hourly, daily, tz_offset)
+        current, hourly, daily = sample_4_0_data
+        response = _build_response(current, hourly, daily)
         for day in response.forecast:
             assert day.summary is None
 
@@ -368,12 +350,12 @@ class TestBuildResponse:
                 }
             ]
         }
-        response = _build_response(current, None, None, 0)
+        response = _build_response(current, None, None)
         assert response.forecast == []
 
     def test_empty_hourly_returns_empty_hourly_lists(self, sample_4_0_data):
-        current, _, daily, tz_offset = sample_4_0_data
-        response = _build_response(current, None, daily, tz_offset)
+        current, _, daily = sample_4_0_data
+        response = _build_response(current, None, daily)
         for day in response.forecast:
             assert day.hourly == []
 

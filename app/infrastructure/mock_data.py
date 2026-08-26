@@ -4,7 +4,7 @@ Provides realistic mock data for weather, calendar, and family members
 when real API credentials are not available or in development mode.
 """
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from app.api.models.family import FamilyMember
 from app.api.models.weather import WeatherResponse
@@ -92,7 +92,7 @@ def get_mock_calendar_events(
             )
     else:
         # Default to current week
-        today = datetime.now()
+        today = datetime.now(UTC)
         range_start = today - timedelta(days=today.weekday())
         range_start = range_start.replace(hour=0, minute=0, second=0)
         range_end = range_start + timedelta(days=6, hours=23, minutes=59)
@@ -456,21 +456,19 @@ def get_mock_calendar_events(
 def _get_mock_api_responses() -> tuple[dict, list[dict], list[dict]]:
     """Generate mock API response dicts that match One Call API 4.0 structure exactly.
 
+    All timestamps are in UTC for consistent wire format.
+
     Returns:
         Tuple of (current_data, hourly_data, daily_data) - raw dicts matching 4.0 API responses.
     """
-    from datetime import timezone as tz
-
-    # Eastern Time offset (EDT = UTC-4, EST = UTC-5)
-    # For simplicity, use EDT (-4 hours = -14400 seconds)
-    tz_offset = -14400
-    eastern_tz = tz(timedelta(seconds=tz_offset))
-    now = datetime.now(eastern_tz)
+    # Use UTC for all mock timestamps
+    now = datetime.now(UTC)
     today = now.date()
 
-    # Mock sunrise/sunset times (Eastern)
-    sunrise_time = now.replace(hour=6, minute=12, second=0, microsecond=0)
-    sunset_time = now.replace(hour=19, minute=48, second=0, microsecond=0)
+    # Mock sunrise/sunset times (UTC)
+    # Approximate Eastern sunrise/sunset converted to UTC
+    sunrise_time = now.replace(hour=10, minute=12, second=0, microsecond=0)  # ~6am EST = 10am UTC
+    sunset_time = now.replace(hour=23, minute=48, second=0, microsecond=0)  # ~7pm EST = 11pm UTC
     sunrise_ts = int(sunrise_time.timestamp())
     sunset_ts = int(sunset_time.timestamp())
 
@@ -479,8 +477,8 @@ def _get_mock_api_responses() -> tuple[dict, list[dict], list[dict]]:
     current_data = {
         "lat": 40.715401,
         "lon": -73.512924,
-        "timezone": "America/New_York",
-        "timezone_offset": tz_offset,
+        "timezone": "UTC",
+        "timezone_offset": 0,
         "data": [
             {
                 "dt": int(now.timestamp()),
@@ -559,15 +557,15 @@ def _get_mock_api_responses() -> tuple[dict, list[dict], list[dict]]:
     conditions = ["Clear", "Clouds", "Drizzle", "Rain", "Thunderstorm", "Clouds", "Clear"]
     for i in range(19):
         day_date = today + timedelta(days=i)
-        # Use Eastern-aware datetimes so timestamps align with hourly data
-        day_midnight = datetime.combine(day_date, datetime.min.time(), tzinfo=eastern_tz)
+        # Use UTC datetimes for consistent wire format
+        day_midnight = datetime.combine(day_date, datetime.min.time(), tzinfo=UTC)
         day_ts = int(day_midnight.timestamp())
 
         day_sunrise = datetime.combine(
-            day_date, datetime.min.time().replace(hour=6, minute=12), tzinfo=eastern_tz
+            day_date, datetime.min.time().replace(hour=10, minute=12), tzinfo=UTC
         )
         day_sunset = datetime.combine(
-            day_date, datetime.min.time().replace(hour=19, minute=48), tzinfo=eastern_tz
+            day_date, datetime.min.time().replace(hour=23, minute=48), tzinfo=UTC
         )
         day_sunrise_ts = int(day_sunrise.timestamp())
         day_sunset_ts = int(day_sunset.timestamp())
@@ -639,8 +637,5 @@ def get_mock_weather(units: str = "imperial") -> WeatherResponse:
 
     current_data, hourly_data, daily_data = _get_mock_api_responses()
 
-    # Extract timezone_offset from mock current data
-    tz_offset = current_data.get("timezone_offset", 0)
-
     # Parse through the same function as real API data
-    return _build_response(current_data, hourly_data, daily_data, tz_offset, units)
+    return _build_response(current_data, hourly_data, daily_data, units)

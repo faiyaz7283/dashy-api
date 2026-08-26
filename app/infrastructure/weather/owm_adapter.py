@@ -4,7 +4,7 @@ Fetches weather data from OpenWeatherMap One Call API 4.0.
 """
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 
 import httpx
 
@@ -74,55 +74,45 @@ def _map_icon(icon_code: str) -> str:
     return "d"  # default to day
 
 
-def _ts_to_iso(ts: int, tz_offset: int = 0) -> str:
-    """Convert Unix timestamp to ISO time string (HH:MM) in local timezone."""
-    local_tz = timezone(timedelta(seconds=tz_offset))
-    return datetime.fromtimestamp(ts, tz=local_tz).strftime("%H:%M")
+def _ts_to_iso(ts: int) -> str:
+    """Convert Unix timestamp to ISO time string (HH:MM) in UTC."""
+    return datetime.fromtimestamp(ts, tz=UTC).strftime("%H:%M")
 
 
-def _ts_to_datetime(ts: int, tz_offset: int = 0) -> str:
-    """Convert Unix timestamp to ISO datetime string in local timezone."""
-    local_tz = timezone(timedelta(seconds=tz_offset))
-    return datetime.fromtimestamp(ts, tz=local_tz).strftime("%Y-%m-%dT%H:%M:%S")
+def _ts_to_datetime(ts: int) -> str:
+    """Convert Unix timestamp to ISO datetime string in UTC."""
+    return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%dT%H:%M:%S+00:00")
 
 
-def _ts_to_date(ts: int, tz_offset: int = 0) -> str:
-    """Convert Unix timestamp to ISO date string (YYYY-MM-DD) in local timezone."""
-    local_tz = timezone(timedelta(seconds=tz_offset))
-    return datetime.fromtimestamp(ts, tz=local_tz).strftime("%Y-%m-%d")
+def _ts_to_date(ts: int) -> str:
+    """Convert Unix timestamp to ISO date string (YYYY-MM-DD) in UTC."""
+    return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d")
 
 
-def _get_today_midnight_timestamp(tz_offset: int) -> int:
-    """Get Unix timestamp for today's midnight in the given timezone.
-
-    This ensures "today" is calculated in the local timezone (Eastern Time),
-    not UTC. The tz_offset comes from the OWM API response and accounts for DST.
-
-    Args:
-        tz_offset: Timezone offset in seconds from UTC.
+def _get_today_midnight_timestamp() -> int:
+    """Get Unix timestamp for today's midnight in UTC.
 
     Returns:
-        Unix timestamp for today's midnight in the specified timezone.
+        Unix timestamp for today's midnight UTC.
     """
-    local_tz = timezone(timedelta(seconds=tz_offset))
-    now = datetime.now(local_tz)
+    now = datetime.now(UTC)
     today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
     return int(today_midnight.timestamp())
 
 
 def _parse_hourly_from_data(
-    hourly_data: list[dict], day_date: str, tz_offset: int = 0, units: str = "imperial"
+    hourly_data: list[dict], day_date: str, units: str = "imperial"
 ) -> list[HourlyForecast]:
     """Parse hourly data for a specific day from One Call API 4.0 response."""
     result = []
     for h in hourly_data:
-        h_date = _ts_to_date(h["dt"], tz_offset)
+        h_date = _ts_to_date(h["dt"])
         if h_date != day_date:
             continue
         condition = _map_condition(h["weather"][0]["main"])
         result.append(
             HourlyForecast(
-                time=_ts_to_datetime(h["dt"], tz_offset),
+                time=_ts_to_datetime(h["dt"]),
                 temperature=convert_temperature(h["temp"], units),
                 feels_like=convert_temperature(h["feels_like"], units),
                 condition=condition,
@@ -142,16 +132,16 @@ def _build_response(
     current_data: dict,
     hourly_data: list[dict] | None,
     daily_data: list[dict] | None,
-    tz_offset: int,
     units: str = "imperial",
 ) -> WeatherResponse:
     """Build WeatherResponse from One Call API 4.0 data.
+
+    All timestamps are converted to UTC for consistent wire format.
 
     Args:
         current_data: Current weather data dict from OWM API.
         hourly_data: Hourly forecast data list, or None.
         daily_data: Daily forecast data list, or None.
-        tz_offset: Timezone offset in seconds from UTC.
         units: Temperature units ("metric" or "imperial").
 
     Returns:
@@ -162,11 +152,10 @@ def _build_response(
         current_record = current_data["data"][0]
         current_condition = _map_condition(current_record["weather"][0]["main"])
 
-        # Calculate is_night based on sunrise/sunset times
+        # Calculate is_night based on sunrise/sunset times (all in UTC)
         is_night = False
         if "sunrise" in current_record and "sunset" in current_record:
-            local_tz = timezone(timedelta(seconds=tz_offset))
-            now = datetime.now(local_tz)
+            now = datetime.now(UTC)
             sunrise_ts = current_record["sunrise"]
             sunset_ts = current_record["sunset"]
             now_ts = now.timestamp()
@@ -185,12 +174,8 @@ def _build_response(
             pressure=current_record.get("pressure"),
             dew_point=convert_temperature(current_record.get("dew_point"), units),
             uvi=current_record.get("uvi"),
-            sunrise=_ts_to_iso(current_record["sunrise"], tz_offset)
-            if "sunrise" in current_record
-            else None,
-            sunset=_ts_to_iso(current_record["sunset"], tz_offset)
-            if "sunset" in current_record
-            else None,
+            sunrise=_ts_to_iso(current_record["sunrise"]) if "sunrise" in current_record else None,
+            sunset=_ts_to_iso(current_record["sunset"]) if "sunset" in current_record else None,
         )
     else:
         # Should not reach here since we already checked current_data, but fallback
@@ -202,14 +187,13 @@ def _build_response(
     forecast: list[DailyForecast] = []
     seen_dates: set[str] = set()
 
-    # Get today's date in local timezone to filter out past days
-    local_tz = timezone(timedelta(seconds=tz_offset))
-    now_ts = int(datetime.now(local_tz).timestamp())
-    today_date = _ts_to_date(now_ts, tz_offset)
+    # Get today's date in UTC to filter out past days
+    now_ts = int(datetime.now(UTC).timestamp())
+    today_date = _ts_to_date(now_ts)
 
     if daily_data:
         for day in daily_data:
-            date = _ts_to_date(day["dt"], tz_offset)
+            date = _ts_to_date(day["dt"])
             # Skip past dates and duplicates
             if date < today_date or date in seen_dates:
                 continue
@@ -223,7 +207,7 @@ def _build_response(
             # Get hourly data for this day
             day_hourly = []
             if hourly_data:
-                day_hourly = _parse_hourly_from_data(hourly_data, date, tz_offset, units)
+                day_hourly = _parse_hourly_from_data(hourly_data, date, units)
 
             forecast.append(
                 DailyForecast(
@@ -249,12 +233,10 @@ def _build_response(
                     rain=day.get("rain"),
                     snow=day.get("snow"),
                     clouds=day.get("clouds"),
-                    sunrise=(_ts_to_iso(day["sunrise"], tz_offset) if "sunrise" in day else None),
-                    sunset=(_ts_to_iso(day["sunset"], tz_offset) if "sunset" in day else None),
-                    moonrise=(
-                        _ts_to_iso(day["moonrise"], tz_offset) if "moonrise" in day else None
-                    ),
-                    moonset=(_ts_to_iso(day["moonset"], tz_offset) if "moonset" in day else None),
+                    sunrise=(_ts_to_iso(day["sunrise"]) if "sunrise" in day else None),
+                    sunset=(_ts_to_iso(day["sunset"]) if "sunset" in day else None),
+                    moonrise=(_ts_to_iso(day["moonrise"]) if "moonrise" in day else None),
+                    moonset=(_ts_to_iso(day["moonset"]) if "moonset" in day else None),
                     moon_phase=day.get("moon_phase"),
                     summary=None,  # daily.summary removed in 4.0
                     hourly=day_hourly,
@@ -294,6 +276,8 @@ class OWMWeatherAdapter:
     async def get_weather(self, units: str = "imperial") -> WeatherResponse:
         """Fetch current weather and 19-day forecast from OpenWeatherMap API 4.0.
 
+        All timestamps in the response are converted to UTC for consistent wire format.
+
         Args:
             units: Temperature units - "metric" for Celsius, "imperial" for Fahrenheit (default).
 
@@ -302,7 +286,7 @@ class OWMWeatherAdapter:
         """
         client = get_http_client()
 
-        # Step 1: Fetch current weather to get timezone_offset
+        # Step 1: Fetch current weather
         current_data = await self._fetch_current(client)
         if current_data is None:
             logger.warning("current_weather_failed", msg="falling back to mock data")
@@ -310,10 +294,8 @@ class OWMWeatherAdapter:
 
             return get_mock_weather(units)
 
-        # Step 2: Calculate start timestamp (today's midnight in local timezone)
-        # The timezone_offset from OWM accounts for DST automatically.
-        tz_offset = current_data.get("timezone_offset", 0)
-        start_ts = _get_today_midnight_timestamp(tz_offset)
+        # Step 2: Calculate start timestamp (today's midnight in UTC)
+        start_ts = _get_today_midnight_timestamp()
 
         # Step 3: Fetch daily and hourly concurrently with start parameter
         daily_task = self._fetch_daily(client, start=start_ts)
@@ -328,7 +310,7 @@ class OWMWeatherAdapter:
 
             return get_mock_weather(units)
 
-        return _build_response(current_data, hourly_data, daily_data, tz_offset, units)
+        return _build_response(current_data, hourly_data, daily_data, units)
 
     async def _fetch_current(self, client: httpx.AsyncClient) -> dict | None:
         """Fetch current weather from One Call API 4.0."""
