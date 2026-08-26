@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.core.logging import get_logger
+from app.domain.chores.condition_evaluator import ConditionEvaluator
 from app.domain.chores.models import (
     ChoreAssociation,
     ChoreCategory,
@@ -20,7 +21,7 @@ from app.domain.chores.models import (
     MasterChoreStatus,
 )
 from app.domain.chores.ports import ChoresRepository
-from app.domain.chores.schemas import RecurrenceRule
+from app.domain.chores.schemas import ConditionsConfig, RecurrenceRule
 from app.domain.chores.utils.periods import calculate_period, get_next_occurrence
 
 logger = get_logger(__name__)
@@ -51,13 +52,19 @@ class ChoresService:
     and instance status transitions.
     """
 
-    def __init__(self, repository: ChoresRepository) -> None:
+    def __init__(
+        self,
+        repository: ChoresRepository,
+        condition_evaluator: ConditionEvaluator | None = None,
+    ) -> None:
         """Initialize chores service.
 
         Args:
             repository: Chores data repository.
+            condition_evaluator: Optional evaluator for conditional chores.
         """
         self.repository = repository
+        self.condition_evaluator = condition_evaluator
 
     async def get_all_data(self) -> dict:
         """Retrieve all chores data in a single call.
@@ -511,6 +518,17 @@ class ChoresService:
 
         if master.recurrence_rule is None:
             return None
+
+        if master.conditions and self.condition_evaluator:
+            conditions_config = ConditionsConfig(**master.conditions)
+            conditions_met = await self.condition_evaluator.evaluate(conditions_config)
+            if not conditions_met:
+                logger.info(
+                    "generate_instance_skipped_conditions",
+                    association_id=association_id,
+                    master_id=master.id,
+                )
+                return None
 
         rule = RecurrenceRule(**master.recurrence_rule)
         today = datetime.now(UTC).date()

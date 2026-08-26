@@ -1,6 +1,7 @@
 """Unit tests for chores domain services."""
 
 from datetime import date
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -746,4 +747,125 @@ class TestCompletionTrigger:
         updated_master = await service.repository.get_master_chore_by_id("master-complete-001")
         assert updated_master is not None
         assert updated_master.occurrence_count >= 1
+
+
+class TestConditionalChores:
+    """Tests for conditional chore generation."""
+
+    @pytest.fixture
+    def mock_evaluator(self) -> AsyncMock:
+        """Create a mock condition evaluator.
+
+        Returns:
+            AsyncMock configured as ConditionEvaluator.
+        """
+        return AsyncMock()
+
+    @pytest.fixture
+    def service_with_evaluator(
+        self, repository: MockChoresRepository, mock_evaluator: AsyncMock
+    ) -> ChoresService:
+        """Create a chores service with mock evaluator.
+
+        Args:
+            repository: Mock repository fixture.
+            mock_evaluator: Mock evaluator fixture.
+
+        Returns:
+            ChoresService instance with evaluator.
+        """
+        return ChoresService(repository=repository, condition_evaluator=mock_evaluator)
+
+    @pytest.mark.asyncio
+    async def test_generate_when_conditions_met(
+        self, service_with_evaluator: ChoresService, mock_evaluator: AsyncMock
+    ) -> None:
+        """Test instance generation when conditions are met."""
+        mock_evaluator.evaluate.return_value = True
+
+        master = MasterChore(
+            id="master-cond-001",
+            name="Conditional Chore",
+            category_id="cat-kitchen",
+            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            conditions={"logic": "and", "conditions": []},
+            created_by="faiyaz",
+        )
+        await service_with_evaluator.create_master_chore(master, tag_ids=[])
+
+        association = ChoreAssociation(
+            id="assoc-cond-001",
+            master_chore_id="master-cond-001",
+            member_id="arya",
+            created_by="faiyaz",
+        )
+        await service_with_evaluator.create_association(association)
+
+        # Should have generated an instance
+        instances = await service_with_evaluator.get_instances(
+            master_chore_id="master-cond-001"
+        )
+        assert len(instances) == 1
+        mock_evaluator.evaluate.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_skip_when_conditions_not_met(
+        self, service_with_evaluator: ChoresService, mock_evaluator: AsyncMock
+    ) -> None:
+        """Test instance generation is skipped when conditions are not met."""
+        mock_evaluator.evaluate.return_value = False
+
+        master = MasterChore(
+            id="master-cond-002",
+            name="Conditional Chore Not Met",
+            category_id="cat-kitchen",
+            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            conditions={"logic": "and", "conditions": []},
+            created_by="faiyaz",
+        )
+        await service_with_evaluator.create_master_chore(master, tag_ids=[])
+
+        association = ChoreAssociation(
+            id="assoc-cond-002",
+            master_chore_id="master-cond-002",
+            member_id="arya",
+            created_by="faiyaz",
+        )
+        await service_with_evaluator.create_association(association)
+
+        # Should NOT have generated an instance
+        instances = await service_with_evaluator.get_instances(
+            master_chore_id="master-cond-002"
+        )
+        assert len(instances) == 0
+        mock_evaluator.evaluate.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_generate_without_conditions(
+        self, service_with_evaluator: ChoresService, mock_evaluator: AsyncMock
+    ) -> None:
+        """Test instance generation when no conditions are defined."""
+        master = MasterChore(
+            id="master-cond-003",
+            name="Non-conditional Chore",
+            category_id="cat-kitchen",
+            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            created_by="faiyaz",
+        )
+        await service_with_evaluator.create_master_chore(master, tag_ids=[])
+
+        association = ChoreAssociation(
+            id="assoc-cond-003",
+            master_chore_id="master-cond-003",
+            member_id="arya",
+            created_by="faiyaz",
+        )
+        await service_with_evaluator.create_association(association)
+
+        # Should have generated an instance without calling evaluator
+        instances = await service_with_evaluator.get_instances(
+            master_chore_id="master-cond-003"
+        )
+        assert len(instances) == 1
+        mock_evaluator.evaluate.assert_not_called()
 

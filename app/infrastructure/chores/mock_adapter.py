@@ -132,7 +132,36 @@ _MASTER_6 = MasterChore(
     updated_at=_NOW - timedelta(days=7),
 )
 
-_ALL_MASTERS = [_MASTER_1, _MASTER_2, _MASTER_3, _MASTER_4, _MASTER_5, _MASTER_6]
+_MASTER_7_CONDITIONAL = MasterChore(
+    id="master-007",
+    name="Shovel Snow",
+    category_id="cat-outdoor",
+    tags=[_SAMPLE_TAGS[1]],
+    difficulty=4,
+    recurrence_rule={"frequency": "daily", "time": "08:00"},
+    estimated_minutes=45,
+    expiration_behavior=ExpirationBehavior.DISAPPEAR,
+    conditions={
+        "logic": "and",
+        "conditions": [
+            {"type": "weather", "metric": "snowfall", "operator": "gt", "value": 0}
+        ],
+    },
+    created_by="faiyaz",
+    status=MasterChoreStatus.ACTIVE,
+    created_at=_NOW - timedelta(days=5),
+    updated_at=_NOW - timedelta(days=5),
+)
+
+_ALL_MASTERS = [
+    _MASTER_1,
+    _MASTER_2,
+    _MASTER_3,
+    _MASTER_4,
+    _MASTER_5,
+    _MASTER_6,
+    _MASTER_7_CONDITIONAL,
+]
 
 # Mock associations
 _ASSOCIATIONS = [
@@ -175,6 +204,14 @@ _ASSOCIATIONS = [
         created_by="faiyaz",
         created_at=_NOW - timedelta(days=10),
         updated_at=_NOW - timedelta(days=10),
+    ),
+    ChoreAssociation(
+        id="assoc-006",
+        master_chore_id="master-007",
+        member_id="arya",
+        created_by="faiyaz",
+        created_at=_NOW - timedelta(days=5),
+        updated_at=_NOW - timedelta(days=5),
     ),
 ]
 

@@ -12,6 +12,7 @@ from app.config import settings
 from app.core.cache import Cache, get_cache
 from app.core.database import get_async_session_factory
 from app.domain.calendar.ports import CalendarProvider
+from app.domain.chores.condition_evaluator import ConditionEvaluator
 from app.domain.chores.ports import ChoresRepository
 from app.domain.chores.services import ChoresService
 from app.domain.family.ports import FamilyRepository
@@ -105,18 +106,47 @@ async def get_chores_repository() -> ChoresRepository:
         await session.close()
 
 
+async def get_condition_evaluator(
+    weather_provider: WeatherProvider = Depends(get_weather_provider),
+    calendar_provider: CalendarProvider = Depends(get_calendar_provider),
+) -> ConditionEvaluator:
+    """Get the condition evaluator for conditional chores.
+
+    Uses the first family member's email as the default calendar ID.
+
+    Args:
+        weather_provider: Injected weather provider.
+        calendar_provider: Injected calendar provider.
+
+    Returns:
+        ConditionEvaluator instance.
+    """
+    family_members = settings.get_family_members()
+    calendar_id = family_members[0].email if family_members else ""
+    return ConditionEvaluator(
+        weather_provider=weather_provider,
+        calendar_provider=calendar_provider,
+        calendar_id=calendar_id,
+    )
+
+
 async def get_chores_service(
     chores_repository: ChoresRepository = Depends(get_chores_repository),
+    condition_evaluator: ConditionEvaluator = Depends(get_condition_evaluator),
 ) -> ChoresService:
     """Get the chores service wrapping the repository.
 
     Args:
         chores_repository: Injected chores repository.
+        condition_evaluator: Injected condition evaluator.
 
     Returns:
         ChoresService instance.
     """
-    return ChoresService(repository=chores_repository)
+    return ChoresService(
+        repository=chores_repository,
+        condition_evaluator=condition_evaluator,
+    )
 
 
 async def get_redis_cache() -> Cache:

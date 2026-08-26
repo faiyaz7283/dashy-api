@@ -5,6 +5,8 @@ Defines the contracts for weather data providers and repositories.
 
 from typing import Protocol
 
+from app.api.models.weather import WeatherResponse
+
 
 class WeatherProvider(Protocol):
     """Protocol for weather data providers.
@@ -12,26 +14,15 @@ class WeatherProvider(Protocol):
     Implementations fetch weather data from external APIs or mock sources.
     """
 
-    async def get_current_weather(self, location: str) -> dict:
-        """Fetch current weather conditions.
+    async def get_weather(self, units: str = "imperial") -> WeatherResponse:
+        """Fetch current weather conditions and forecast.
 
         Args:
-            location: Location identifier (e.g., "New York,NY" or coordinates).
+            units: Temperature units — "metric" for Celsius,
+                "imperial" for Fahrenheit (default).
 
         Returns:
-            Dictionary containing current weather data.
-        """
-        ...
-
-    async def get_forecast(self, location: str, days: int = 7) -> list[dict]:
-        """Fetch weather forecast.
-
-        Args:
-            location: Location identifier.
-            days: Number of days to forecast (1-16).
-
-        Returns:
-            List of dictionaries containing daily forecast data.
+            WeatherResponse with current conditions and forecast.
         """
         ...
 
