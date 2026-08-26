@@ -6,10 +6,21 @@ and endpoint behavior.
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from uuid6 import uuid7
 
 from app.core.container import get_chores_repository, get_chores_service
 from app.domain.chores.services import ChoresService
-from app.infrastructure.chores.mock_adapter import MockChoresRepository
+from app.infrastructure.chores.mock_adapter import (
+    _ASSOC_001,
+    _CAT_KITCHEN,
+    _CAT_OUTDOOR,
+    _INST_001,
+    _MASTER_001,
+    _MASTER_002,
+    _MASTER_003,
+    _MASTER_005,
+    MockChoresRepository,
+)
 from app.main import app
 
 
@@ -100,7 +111,7 @@ async def test_create_master_chore(client: AsyncClient) -> None:
         "/api/v1/chores/masters",
         json={
             "name": "Test Chore",
-            "category_id": "cat-kitchen",
+            "category_id": str(_CAT_KITCHEN),
             "tag_ids": [],
             "difficulty": 2,
             "recurrence_rule": {"frequency": "daily", "time": "18:00"},
@@ -125,7 +136,7 @@ async def test_create_master_chore_with_conditions(client: AsyncClient) -> None:
         "/api/v1/chores/masters",
         json={
             "name": "Shovel Snow",
-            "category_id": "cat-outdoor",
+            "category_id": str(_CAT_OUTDOOR),
             "tag_ids": [],
             "difficulty": 3,
             "recurrence_rule": {"frequency": "daily", "time": "08:00"},
@@ -153,7 +164,7 @@ async def test_create_association(client: AsyncClient) -> None:
     response = await client.post(
         "/api/v1/chores/associations",
         json={
-            "master_chore_id": "master-005",
+            "master_chore_id": str(_MASTER_005),
             "member_id": "arya",
             "is_open_pool": False,
             "created_by": "faiyaz",
@@ -161,7 +172,7 @@ async def test_create_association(client: AsyncClient) -> None:
     )
     assert response.status_code == 201
     data = response.json()
-    assert data["master_chore_id"] == "master-005"
+    assert data["master_chore_id"] == str(_MASTER_005)
     assert data["member_id"] == "arya"
     assert data["is_open_pool"] is False
 
@@ -172,7 +183,7 @@ async def test_create_open_pool_association(client: AsyncClient) -> None:
     response = await client.post(
         "/api/v1/chores/associations",
         json={
-            "master_chore_id": "master-002",
+            "master_chore_id": str(_MASTER_002),
             "member_id": None,
             "is_open_pool": True,
             "created_by": "trisha",
@@ -180,7 +191,7 @@ async def test_create_open_pool_association(client: AsyncClient) -> None:
     )
     assert response.status_code == 201
     data = response.json()
-    assert data["master_chore_id"] == "master-002"
+    assert data["master_chore_id"] == str(_MASTER_002)
     assert data["member_id"] is None
     assert data["is_open_pool"] is True
 
@@ -188,7 +199,7 @@ async def test_create_open_pool_association(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_delete_association(client: AsyncClient) -> None:
     """Test DELETE /api/v1/chores/associations/{id}."""
-    response = await client.delete("/api/v1/chores/associations/assoc-001")
+    response = await client.delete(f"/api/v1/chores/associations/{_ASSOC_001}")
     assert response.status_code == 204
 
 
@@ -200,7 +211,7 @@ async def test_create_association_nonexistent_master_returns_404(
     response = await client.post(
         "/api/v1/chores/associations",
         json={
-            "master_chore_id": "nonexistent",
+            "master_chore_id": str(uuid7()),
             "member_id": "arya",
             "is_open_pool": False,
             "created_by": "faiyaz",
@@ -218,7 +229,7 @@ async def test_create_association_duplicate_member_returns_409(
     response = await client.post(
         "/api/v1/chores/associations",
         json={
-            "master_chore_id": "master-001",
+            "master_chore_id": str(_MASTER_001),
             "member_id": "arya",
             "is_open_pool": False,
             "created_by": "faiyaz",
@@ -238,7 +249,7 @@ async def test_create_association_non_collaborative_conflict_returns_409(
     response = await client.post(
         "/api/v1/chores/associations",
         json={
-            "master_chore_id": "master-001",
+            "master_chore_id": str(_MASTER_001),
             "member_id": "raya",
             "is_open_pool": False,
             "created_by": "faiyaz",
@@ -258,7 +269,7 @@ async def test_create_association_duplicate_open_pool_returns_409(
     response = await client.post(
         "/api/v1/chores/associations",
         json={
-            "master_chore_id": "master-003",
+            "master_chore_id": str(_MASTER_003),
             "member_id": None,
             "is_open_pool": True,
             "created_by": "faiyaz",
@@ -275,13 +286,13 @@ async def test_create_association_inactive_master_returns_404(
 ) -> None:
     """Test creating association with inactive master returns 404."""
     # First archive master-002
-    await client.delete("/api/v1/chores/masters/master-002")
+    await client.delete(f"/api/v1/chores/masters/{_MASTER_002}")
 
     # Try to create association with archived master
     response = await client.post(
         "/api/v1/chores/associations",
         json={
-            "master_chore_id": "master-002",
+            "master_chore_id": str(_MASTER_002),
             "member_id": "arya",
             "is_open_pool": False,
             "created_by": "faiyaz",
@@ -295,7 +306,7 @@ async def test_delete_nonexistent_association_returns_404(
     client: AsyncClient,
 ) -> None:
     """Test deleting non-existent association returns 404."""
-    response = await client.delete("/api/v1/chores/associations/nonexistent")
+    response = await client.delete(f"/api/v1/chores/associations/{uuid7()}")
     assert response.status_code == 404
 
 
@@ -303,7 +314,7 @@ async def test_delete_nonexistent_association_returns_404(
 async def test_claim_instance(client: AsyncClient) -> None:
     """Test POST /api/v1/chores/instances/{id}/claim."""
     response = await client.post(
-        "/api/v1/chores/instances/inst-001/claim",
+        f"/api/v1/chores/instances/{_INST_001}/claim",
         json={"member_id": "arya"},
     )
     assert response.status_code == 200
@@ -317,7 +328,7 @@ async def test_claim_instance(client: AsyncClient) -> None:
 async def test_assign_instance(client: AsyncClient) -> None:
     """Test POST /api/v1/chores/instances/{id}/assign."""
     response = await client.post(
-        "/api/v1/chores/instances/inst-001/assign",
+        f"/api/v1/chores/instances/{_INST_001}/assign",
         json={"assignee_id": "raya", "assigner_id": "trisha"},
     )
     assert response.status_code == 200
@@ -331,7 +342,7 @@ async def test_assign_instance(client: AsyncClient) -> None:
 async def test_update_instance_status(client: AsyncClient) -> None:
     """Test PUT /api/v1/chores/instances/{id}/status."""
     response = await client.put(
-        "/api/v1/chores/instances/inst-001/status",
+        f"/api/v1/chores/instances/{_INST_001}/status",
         json={
             "status": "in_progress",
             "actor_id": "arya",
@@ -347,7 +358,7 @@ async def test_update_instance_status(client: AsyncClient) -> None:
 async def test_complete_instance(client: AsyncClient) -> None:
     """Test completing an instance."""
     response = await client.put(
-        "/api/v1/chores/instances/inst-001/status",
+        f"/api/v1/chores/instances/{_INST_001}/status",
         json={
             "status": "completed",
             "actor_id": "arya",
@@ -389,7 +400,7 @@ async def test_create_tag(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_delete_master_chore(client: AsyncClient) -> None:
     """Test DELETE /api/v1/chores/masters/{id}."""
-    response = await client.delete("/api/v1/chores/masters/master-001")
+    response = await client.delete(f"/api/v1/chores/masters/{_MASTER_001}")
     assert response.status_code == 204
 
 
@@ -397,7 +408,7 @@ async def test_delete_master_chore(client: AsyncClient) -> None:
 async def test_claim_nonexistent_instance_returns_404(client: AsyncClient) -> None:
     """Test that claiming a nonexistent instance returns 404."""
     response = await client.post(
-        "/api/v1/chores/instances/nonexistent/claim",
+        f"/api/v1/chores/instances/{uuid7()}/claim",
         json={"member_id": "arya"},
     )
     assert response.status_code == 404
@@ -407,7 +418,7 @@ async def test_claim_nonexistent_instance_returns_404(client: AsyncClient) -> No
 async def test_update_master_chore(client: AsyncClient) -> None:
     """Test PUT /api/v1/chores/masters/{id}."""
     response = await client.put(
-        "/api/v1/chores/masters/master-002",
+        f"/api/v1/chores/masters/{_MASTER_002}",
         json={
             "name": "Clean Bathroom Sink (Updated)",
             "difficulty": 3,
@@ -423,7 +434,7 @@ async def test_update_master_chore(client: AsyncClient) -> None:
 async def test_update_master_chore_status(client: AsyncClient) -> None:
     """Test updating master chore status."""
     response = await client.put(
-        "/api/v1/chores/masters/master-001",
+        f"/api/v1/chores/masters/{_MASTER_001}",
         json={
             "status": "inactive",
         },
@@ -437,7 +448,7 @@ async def test_update_master_chore_status(client: AsyncClient) -> None:
 async def test_update_nonexistent_master_returns_404(client: AsyncClient) -> None:
     """Test updating a non-existent master returns 404."""
     response = await client.put(
-        "/api/v1/chores/masters/nonexistent-master",
+        f"/api/v1/chores/masters/{uuid7()}",
         json={
             "name": "Updated Name",
         },
@@ -449,7 +460,7 @@ async def test_update_nonexistent_master_returns_404(client: AsyncClient) -> Non
 async def test_bulk_update_master_status(client: AsyncClient) -> None:
     """Test bulk updating master chore statuses via query params."""
     response = await client.post(
-        "/api/v1/chores/masters/bulk-status?master_ids=master-001&master_ids=master-002&status=inactive",
+        f"/api/v1/chores/masters/bulk-status?master_ids={_MASTER_001}&master_ids={_MASTER_002}&status=inactive",
     )
     assert response.status_code == 200
     data = response.json()
@@ -463,7 +474,7 @@ async def test_bulk_update_master_status_invalid_returns_400(
 ) -> None:
     """Test bulk update with invalid status returns 400."""
     response = await client.post(
-        "/api/v1/chores/masters/bulk-status?master_ids=master-001&status=invalid_status",
+        f"/api/v1/chores/masters/bulk-status?master_ids={_MASTER_001}&status=invalid_status",
     )
     assert response.status_code == 400
 

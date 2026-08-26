@@ -23,8 +23,38 @@ load_dotenv(".env.test", override=True)
 from app.config import Settings  # noqa: E402
 
 
+@pytest.fixture(scope="session")
+async def ensure_test_database():
+    """Create the test database if it doesn't exist.
+
+    Connects to the default 'postgres' database to issue CREATE DATABASE
+    if needed, then disconnects before the main fixtures connect.
+    """
+    import asyncpg
+
+    user = os.environ.get("POSTGRES_USER", "dashy_test")
+    password = os.environ.get("POSTGRES_PASSWORD", "test_password")
+    db = os.environ.get("POSTGRES_DB", "dashy_test")
+    host = os.environ.get("POSTGRES_HOST", "postgres")
+    port = int(os.environ.get("POSTGRES_PORT", 5432))
+
+    conn = await asyncpg.connect(
+        user=user, password=password, database="postgres",
+        host=host, port=port,
+    )
+    try:
+        exists = await conn.fetchval(
+            "SELECT 1 FROM pg_database WHERE datname = $1", db,
+        )
+        if not exists:
+            await conn.execute(f'CREATE DATABASE "{db}"')
+            await conn.execute(f'GRANT ALL ON DATABASE "{db}" TO "{user}"')
+    finally:
+        await conn.close()
+
+
 @pytest.fixture(autouse=True, scope="session")
-async def setup_test_database():
+async def setup_test_database(ensure_test_database):
     """Create database tables before any tests run.
 
     This fixture runs once per test session and ensures all SQLModel
