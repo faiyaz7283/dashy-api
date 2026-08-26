@@ -3,19 +3,19 @@
 Pure business logic for calendar data processing.
 """
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from app.api.models.calendar import Attendee, CalendarEvent
 from app.domain.calendar.models import DateRange, RecurrenceRule
 
 
 def get_default_week_dates() -> tuple[datetime, datetime]:
-    """Get Monday 00:00 and Sunday 23:59 of the current week.
+    """Get Monday 00:00 and Sunday 23:59 of the current week in UTC.
 
     Returns:
-        Tuple of (monday, sunday) datetimes for the current week.
+        Tuple of (monday, sunday) timezone-aware UTC datetimes for the current week.
     """
-    today = datetime.now()
+    today = datetime.now(UTC)
     monday = today - timedelta(days=today.weekday())
     monday = monday.replace(hour=0, minute=0, second=0, microsecond=0)
     sunday = monday + timedelta(days=6, hours=23, minutes=59)

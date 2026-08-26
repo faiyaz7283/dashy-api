@@ -5,6 +5,7 @@ No hardcoded defaults for secrets or environment-specific values.
 """
 
 import json
+from zoneinfo import ZoneInfo
 
 from pydantic_settings import BaseSettings
 
@@ -102,7 +103,15 @@ class Settings(BaseSettings):
     WEATHER_CACHE_TTL: int = 600  # 10 minutes
     CALENDAR_CACHE_TTL: int = 120  # 2 minutes
 
+    # Timezone
+    TIMEZONE: str = "America/New_York"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+
+    @property
+    def tz(self) -> ZoneInfo:
+        """Return ZoneInfo for the configured timezone."""
+        return ZoneInfo(self.TIMEZONE)
 
     @property
     def cors_origin_list(self) -> list[str]:

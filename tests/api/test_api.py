@@ -79,3 +79,16 @@ async def test_get_family_members():
                 assert "email" in member
                 assert "color" in member
                 assert "initial" in member
+
+
+@pytest.mark.asyncio
+async def test_get_config():
+    """Test the config endpoint returns timezone."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v1/config")
+        assert response.status_code == 200
+        data = response.json()
+        assert "timezone" in data
+        assert isinstance(data["timezone"], str)
+        assert len(data["timezone"]) > 0
