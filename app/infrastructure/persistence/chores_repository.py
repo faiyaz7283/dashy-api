@@ -327,14 +327,6 @@ class ChoresRepositoryImpl:
                 # Convert enums to their string values for DB storage
                 if hasattr(value, "value"):
                     value = value.value
-                # Convert datetime to ISO string for string-typed columns
-                if key in (
-                    "started_at",
-                    "completed_at",
-                    "period_start",
-                    "period_end",
-                ) and isinstance(value, datetime):
-                    value = value.isoformat()
                 setattr(db_instance, key, value)
 
         self.session.add(db_instance)

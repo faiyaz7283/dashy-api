@@ -869,3 +869,123 @@ class TestConditionalChores:
         assert len(instances) == 1
         mock_evaluator.evaluate.assert_not_called()
 
+
+class TestUpdateMasterChore:
+    """Tests for update_master_chore service method."""
+
+    @pytest.mark.asyncio
+    async def test_update_master_name(self, service: ChoresService) -> None:
+        """Test updating master chore name."""
+        updated = await service.update_master_chore(
+            "master-001", {"name": "Updated Name"}
+        )
+
+        assert updated.name == "Updated Name"
+
+    @pytest.mark.asyncio
+    async def test_update_master_status(self, service: ChoresService) -> None:
+        """Test updating master chore status."""
+        updated = await service.update_master_chore(
+            "master-001", {"status": MasterChoreStatus.INACTIVE}
+        )
+
+        assert updated.status == MasterChoreStatus.INACTIVE
+
+    @pytest.mark.asyncio
+    async def test_update_master_multiple_fields(self, service: ChoresService) -> None:
+        """Test updating multiple fields at once."""
+        updated = await service.update_master_chore(
+            "master-001",
+            {"name": "New Name", "difficulty": 4, "estimated_minutes": 30},
+        )
+
+        assert updated.name == "New Name"
+        assert updated.difficulty == 4
+        assert updated.estimated_minutes == 30
+
+    @pytest.mark.asyncio
+    async def test_update_nonexistent_master_raises(self, service: ChoresService) -> None:
+        """Test updating non-existent master raises ValueError."""
+        with pytest.raises(ValueError, match="not found"):
+            await service.update_master_chore("nonexistent", {"name": "X"})
+
+
+class TestCollaborativeGeneration:
+    """Tests for collaborative master instance generation."""
+
+    @pytest.mark.asyncio
+    async def test_collaborative_generates_per_association(
+        self, service: ChoresService
+    ) -> None:
+        """Test that collaborative master generates separate instances per member."""
+        # Create collaborative master
+        master = MasterChore(
+            id="master-collab-gen",
+            name="Collaborative Generation",
+            category_id="cat-kitchen",
+            is_collaborative=True,
+            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            created_by="faiyaz",
+        )
+        await service.create_master_chore(master, tag_ids=[])
+
+        # Create two associations (different members)
+        assoc1 = ChoreAssociation(
+            id="assoc-collab-gen-1",
+            master_chore_id="master-collab-gen",
+            member_id="arya",
+            created_by="faiyaz",
+        )
+        await service.create_association(assoc1)
+
+        assoc2 = ChoreAssociation(
+            id="assoc-collab-gen-2",
+            master_chore_id="master-collab-gen",
+            member_id="raya",
+            created_by="faiyaz",
+        )
+        await service.create_association(assoc2)
+
+        # Should have generated two instances (one per association)
+        instances = await service.get_instances(master_chore_id="master-collab-gen")
+        assert len(instances) == 2
+
+        # Each instance should be linked to its association
+        instance_assoc_ids = {i.association_id for i in instances}
+        assert "assoc-collab-gen-1" in instance_assoc_ids
+        assert "assoc-collab-gen-2" in instance_assoc_ids
+
+
+class TestOpenPoolGeneration:
+    """Tests for open pool association instance generation."""
+
+    @pytest.mark.asyncio
+    async def test_open_pool_generates_instance(self, service: ChoresService) -> None:
+        """Test that open pool association generates an instance."""
+        # Create master
+        master = MasterChore(
+            id="master-pool-gen",
+            name="Open Pool Generation",
+            category_id="cat-kitchen",
+            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            created_by="faiyaz",
+        )
+        await service.create_master_chore(master, tag_ids=[])
+
+        # Create open pool association
+        assoc = ChoreAssociation(
+            id="assoc-pool-gen",
+            master_chore_id="master-pool-gen",
+            member_id=None,  # Open pool
+            is_open_pool=True,
+            created_by="faiyaz",
+        )
+        await service.create_association(assoc)
+
+        # Should have generated an instance
+        instances = await service.get_instances(master_chore_id="master-pool-gen")
+        assert len(instances) == 1
+        assert instances[0].association_id == "assoc-pool-gen"
+        # Open pool instances have no claimed_by initially
+        assert instances[0].claimed_by is None
+

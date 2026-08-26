@@ -5,7 +5,7 @@ RESTful endpoints for the family chore management system.
 
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from app.api.deps import ChoresServiceDep
 from app.api.models.chores import (
@@ -298,9 +298,9 @@ async def delete_master_chore(
 
 @router.post("/masters/bulk-status")
 async def bulk_update_master_status(
-    master_ids: list[str],
-    status: str,
     chores_service: ChoresServiceDep,
+    master_ids: list[str] = Query(default=[]),
+    status: str = Query(...),
 ) -> dict:
     """Bulk update the status of multiple master chores.
 

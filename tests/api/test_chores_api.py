@@ -431,3 +431,49 @@ async def test_update_master_chore_status(client: AsyncClient) -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "inactive"
+
+
+@pytest.mark.asyncio
+async def test_update_nonexistent_master_returns_404(client: AsyncClient) -> None:
+    """Test updating a non-existent master returns 404."""
+    response = await client.put(
+        "/api/v1/chores/masters/nonexistent-master",
+        json={
+            "name": "Updated Name",
+        },
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_master_status(client: AsyncClient) -> None:
+    """Test bulk updating master chore statuses via query params."""
+    response = await client.post(
+        "/api/v1/chores/masters/bulk-status?master_ids=master-001&master_ids=master-002&status=inactive",
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "updated_count" in data
+    assert data["updated_count"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_master_status_invalid_returns_400(
+    client: AsyncClient,
+) -> None:
+    """Test bulk update with invalid status returns 400."""
+    response = await client.post(
+        "/api/v1/chores/masters/bulk-status?master_ids=master-001&status=invalid_status",
+    )
+    assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_master_status_empty_list(client: AsyncClient) -> None:
+    """Test bulk update with empty master_ids list."""
+    response = await client.post(
+        "/api/v1/chores/masters/bulk-status?status=active",
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["updated_count"] == 0
