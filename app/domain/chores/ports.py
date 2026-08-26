@@ -3,6 +3,7 @@
 Defines the contracts for chores data access.
 """
 
+from datetime import date
 from typing import Protocol
 
 from app.domain.chores.models import (
@@ -260,5 +261,25 @@ class ChoresRepository(Protocol):
 
         Returns:
             Number of instances archived.
+        """
+        ...
+
+    async def get_instance_for_period(
+        self,
+        association_id: str,
+        period_start: date,
+        period_end: date,
+    ) -> ChoreInstance | None:
+        """Find an existing instance for a specific period and association.
+
+        Used by instance generation to avoid creating duplicates.
+
+        Args:
+            association_id: FK to the association.
+            period_start: Period start date to match.
+            period_end: Period end date to match.
+
+        Returns:
+            ChoreInstance if found, None otherwise.
         """
         ...

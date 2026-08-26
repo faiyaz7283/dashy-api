@@ -1,6 +1,6 @@
 """Chores repository implementation using SQLModel."""
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -480,6 +480,37 @@ class ChoresRepositoryImpl:
 
         await self.session.commit()
         return archived_count
+
+    async def get_instance_for_period(
+        self,
+        association_id: str,
+        period_start: date,
+        period_end: date,
+    ) -> ChoreInstance | None:
+        """Find an existing instance for a specific period and association.
+
+        Used by instance generation to avoid creating duplicates.
+
+        Args:
+            association_id: FK to the association.
+            period_start: Period start date to match.
+            period_end: Period end date to match.
+
+        Returns:
+            Domain ChoreInstance if found, None otherwise.
+        """
+        statement = (
+            select(ChoreInstanceDB)
+            .where(
+                ChoreInstanceDB.association_id == association_id,
+                ChoreInstanceDB.period_start == period_start,
+                ChoreInstanceDB.period_end == period_end,
+                ChoreInstanceDB.status != InstanceStatus.ARCHIVED.value,
+            )
+        )
+        result = await self.session.execute(statement)
+        db_instance = result.scalar_one_or_none()
+        return self._instance_to_domain(db_instance) if db_instance else None
 
     # ── Private helpers ─────────────────────────────────────────
 

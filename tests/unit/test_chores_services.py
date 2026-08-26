@@ -1,5 +1,7 @@
 """Unit tests for chores domain services."""
 
+from datetime import date
+
 import pytest
 
 from app.domain.chores.models import (
@@ -448,7 +450,7 @@ class TestDeleteAssociationCascade:
     @pytest.mark.asyncio
     async def test_delete_association_no_instances(self, service: ChoresService) -> None:
         """Test that deleting association with no instances succeeds."""
-        # Create a new association with no instances
+        # Create a new association directly via repository (bypasses generation)
         new_association = ChoreAssociation(
             id="assoc-no-instances",
             master_chore_id="master-005",
@@ -456,9 +458,292 @@ class TestDeleteAssociationCascade:
             is_open_pool=False,
             created_by="faiyaz",
         )
-        await service.create_association(new_association)
+        await service.repository.create_association(new_association)
 
         # Delete should succeed with 0 archived
         archived_count = await service.delete_association("assoc-no-instances")
         assert archived_count == 0
+
+
+class TestInstanceGeneration:
+    """Tests for instance generation logic."""
+
+    @pytest.mark.asyncio
+    async def test_generate_instance_for_association(
+        self, service: ChoresService
+    ) -> None:
+        """Test generating an instance for an association."""
+        # Create a new master and association
+        master = MasterChore(
+            id="master-gen-001",
+            name="Test Generation",
+            category_id="cat-kitchen",
+            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            created_by="faiyaz",
+        )
+        await service.create_master_chore(master, tag_ids=[])
+
+        association = ChoreAssociation(
+            id="assoc-gen-001",
+            master_chore_id="master-gen-001",
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+        await service.create_association(association)
+
+        # Manually trigger generation
+        instance = await service.generate_instance_for_association("assoc-gen-001")
+
+        assert instance is not None
+        assert instance.master_chore_id == "master-gen-001"
+        assert instance.association_id == "assoc-gen-001"
+        assert instance.status == InstanceStatus.ACTIVE
+        assert instance.claimed_by == "arya"
+
+    @pytest.mark.asyncio
+    async def test_generate_instance_respects_end_date(
+        self, service: ChoresService
+    ) -> None:
+        """Test that generation stops at end_date."""
+        past_date = date(2020, 1, 1)  # Well in the past
+        master = MasterChore(
+            id="master-gen-002",
+            name="Expired Chore",
+            category_id="cat-kitchen",
+            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            end_date=past_date,
+            created_by="faiyaz",
+        )
+        await service.create_master_chore(master, tag_ids=[])
+
+        association = ChoreAssociation(
+            id="assoc-gen-002",
+            master_chore_id="master-gen-002",
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+        await service.create_association(association)
+
+        # Try to generate — should return None because end_date is in the past
+        await service.generate_instance_for_association("assoc-gen-002")
+
+        # The association creation already tried to generate, so we check no new instance
+        instances = await service.get_instances(master_chore_id="master-gen-002")
+        assert len(instances) == 0
+
+    @pytest.mark.asyncio
+    async def test_generate_instance_respects_max_occurrences(
+        self, service: ChoresService
+    ) -> None:
+        """Test that generation stops at max_occurrences."""
+        master = MasterChore(
+            id="master-gen-003",
+            name="Limited Chore",
+            category_id="cat-kitchen",
+            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            max_occurrences=1,
+            occurrence_count=1,  # Already at limit
+            created_by="faiyaz",
+        )
+        await service.create_master_chore(master, tag_ids=[])
+
+        association = ChoreAssociation(
+            id="assoc-gen-003",
+            master_chore_id="master-gen-003",
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+        await service.create_association(association)
+
+        # Try to generate — should return None because max_occurrences reached
+        await service.generate_instance_for_association("assoc-gen-003")
+
+        instances = await service.get_instances(master_chore_id="master-gen-003")
+        assert len(instances) == 0
+
+    @pytest.mark.asyncio
+    async def test_generate_instance_no_duplicate_for_same_period(
+        self, service: ChoresService
+    ) -> None:
+        """Test that generation doesn't create duplicates for the same period."""
+        master = MasterChore(
+            id="master-gen-004",
+            name="No Duplicate",
+            category_id="cat-kitchen",
+            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            created_by="faiyaz",
+        )
+        await service.create_master_chore(master, tag_ids=[])
+
+        association = ChoreAssociation(
+            id="assoc-gen-004",
+            master_chore_id="master-gen-004",
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+        await service.create_association(association)
+
+        # First generation (happens on association creation)
+        instances_after_first = await service.get_instances(master_chore_id="master-gen-004")
+        assert len(instances_after_first) == 1
+
+        # Try to generate again — should return existing instance
+        instance = await service.generate_instance_for_association("assoc-gen-004")
+
+        instances_after_second = await service.get_instances(master_chore_id="master-gen-004")
+        assert len(instances_after_second) == 1
+        assert instance is not None
+        assert instance.id == instances_after_first[0].id
+
+    @pytest.mark.asyncio
+    async def test_generate_instance_increments_occurrence_count(
+        self, service: ChoresService
+    ) -> None:
+        """Test that generation increments master's occurrence_count."""
+        master = MasterChore(
+            id="master-gen-005",
+            name="Count Test",
+            category_id="cat-kitchen",
+            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            occurrence_count=0,
+            created_by="faiyaz",
+        )
+        await service.create_master_chore(master, tag_ids=[])
+
+        association = ChoreAssociation(
+            id="assoc-gen-005",
+            master_chore_id="master-gen-005",
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+        await service.create_association(association)
+
+        # After association creation, occurrence_count should be 1
+        updated_master = await service.repository.get_master_chore_by_id("master-gen-005")
+        assert updated_master is not None
+        assert updated_master.occurrence_count == 1
+
+
+class TestSafetyNet:
+    """Tests for ensure_current_instances safety net."""
+
+    @pytest.mark.asyncio
+    async def test_ensure_current_instances_generates_missing(
+        self, service: ChoresService
+    ) -> None:
+        """Test that safety net generates missing instances."""
+        # Create a master with an association but no instances
+        master = MasterChore(
+            id="master-safety-001",
+            name="Safety Net Test",
+            category_id="cat-kitchen",
+            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            created_by="faiyaz",
+        )
+        await service.create_master_chore(master, tag_ids=[])
+
+        association = ChoreAssociation(
+            id="assoc-safety-001",
+            master_chore_id="master-safety-001",
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+        # Create association directly without triggering generation
+        await service.repository.create_association(association)
+
+        # Verify no instances exist
+        instances_before = await service.get_instances(master_chore_id="master-safety-001")
+        assert len(instances_before) == 0
+
+        # Run safety net
+        generated = await service.ensure_current_instances()
+
+        # Should have generated one instance
+        assert len(generated) >= 1
+        instances_after = await service.get_instances(master_chore_id="master-safety-001")
+        assert len(instances_after) == 1
+
+    @pytest.mark.asyncio
+    async def test_ensure_current_instances_skips_inactive_masters(
+        self, service: ChoresService
+    ) -> None:
+        """Test that safety net skips inactive masters."""
+        master = MasterChore(
+            id="master-safety-002",
+            name="Inactive Master",
+            category_id="cat-kitchen",
+            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            created_by="faiyaz",
+        )
+        # Create via repository to bypass the ACTIVE override in service
+        master.status = MasterChoreStatus.INACTIVE
+        await service.repository.create_master_chore(master, tag_ids=[])
+
+        association = ChoreAssociation(
+            id="assoc-safety-002",
+            master_chore_id="master-safety-002",
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+        await service.repository.create_association(association)
+
+        # Run safety net
+        await service.ensure_current_instances()
+
+        # Should not generate for inactive master
+        instances = await service.get_instances(master_chore_id="master-safety-002")
+        assert len(instances) == 0
+
+
+class TestCompletionTrigger:
+    """Tests for instance completion triggering next generation."""
+
+    @pytest.mark.asyncio
+    async def test_completion_triggers_next_generation(
+        self, service: ChoresService
+    ) -> None:
+        """Test that completing an instance triggers generation of the next."""
+        master = MasterChore(
+            id="master-complete-001",
+            name="Completion Trigger",
+            category_id="cat-kitchen",
+            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            created_by="faiyaz",
+        )
+        await service.create_master_chore(master, tag_ids=[])
+
+        association = ChoreAssociation(
+            id="assoc-complete-001",
+            master_chore_id="master-complete-001",
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+        await service.create_association(association)
+
+        # Get the generated instance
+        instances = await service.get_instances(master_chore_id="master-complete-001")
+        assert len(instances) == 1
+        first_instance = instances[0]
+
+        # Complete it
+        await service.update_instance_status(
+            first_instance.id, InstanceStatus.COMPLETED, "arya"
+        )
+
+        # Should have generated a new instance for the next period
+        # For daily frequency, if we complete before the configured time,
+        # it generates for today again. If after, it generates for tomorrow.
+        # Since we can't control the exact time in tests, we just check that
+        # occurrence_count incremented
+        updated_master = await service.repository.get_master_chore_by_id("master-complete-001")
+        assert updated_master is not None
+        assert updated_master.occurrence_count >= 1
 

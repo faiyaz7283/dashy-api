@@ -1,11 +1,12 @@
 """Chores domain services.
 
 Business logic for chore management including claim/assign
-mutual exclusivity, instance status transitions, and association
-collaborative enforcement.
+mutual exclusivity, instance status transitions, association
+collaborative enforcement, and instance generation.
 """
 
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from app.core.logging import get_logger
 from app.domain.chores.models import (
@@ -18,6 +19,8 @@ from app.domain.chores.models import (
     MasterChoreStatus,
 )
 from app.domain.chores.ports import ChoresRepository
+from app.domain.chores.schemas import RecurrenceRule
+from app.domain.chores.utils.periods import calculate_period, get_next_occurrence
 
 logger = get_logger(__name__)
 
@@ -58,12 +61,17 @@ class ChoresService:
     async def get_all_data(self) -> dict:
         """Retrieve all chores data in a single call.
 
+        Runs the safety net (ensure_current_instances) before fetching
+        data, so the board always shows up-to-date instances.
+
         Returns categories, tags, master chores, associations,
         and instances for the frontend to render the chore board.
 
         Returns:
             Dict with keys: categories, tags, master_chores, associations, instances.
         """
+        await self.ensure_current_instances()
+
         categories = await self.repository.get_categories()
         tags = await self.repository.get_tags()
         master_chores = await self.repository.get_master_chores()
@@ -272,6 +280,8 @@ class ChoresService:
         """Update the status of a chore instance.
 
         Any member can complete any instance — no approval or signoff required.
+        When an instance is completed, triggers generation of the next instance
+        for the same association.
 
         Args:
             instance_id: Unique identifier for the instance.
@@ -309,7 +319,12 @@ class ChoresService:
             new_status=new_status.value,
             actor_id=actor_id,
         )
-        return await self.repository.update_instance(instance_id, updates)
+        updated = await self.repository.update_instance(instance_id, updates)
+
+        if new_status == InstanceStatus.COMPLETED and instance.association_id:
+            await self.generate_instance_for_association(instance.association_id)
+
+        return updated
 
     # ── Associations ───────────────────────────────────────────
 
@@ -335,11 +350,8 @@ class ChoresService:
     async def create_association(self, association: ChoreAssociation) -> ChoreAssociation:
         """Create a new association between a master chore and a member/pool.
 
-        Validates collaborative constraints before creating:
-        - Master must exist and be active
-        - Non-collaborative master: only one non-open-pool association allowed
-        - Open pool: one per master
-        - Collaborative master: multiple non-open-pool associations allowed
+        Validates collaborative constraints before creating, then generates
+        the first instance for the new association.
 
         Args:
             association: ChoreAssociation entity to create.
@@ -370,7 +382,11 @@ class ChoresService:
             member_id=association.member_id,
             is_open_pool=association.is_open_pool,
         )
-        return await self.repository.create_association(association)
+        created = await self.repository.create_association(association)
+
+        await self.generate_instance_for_association(created.id, master)
+
+        return created
 
     async def delete_association(self, association_id: str) -> int:
         """Soft-delete an association and archive its active instances.
@@ -459,3 +475,141 @@ class ChoresService:
                     f"Member '{new_association.member_id}' already has an active "
                     f"association for collaborative master '{master.id}'"
                 )
+
+    # ── Instance Generation ────────────────────────────────────
+
+    async def generate_instance_for_association(
+        self,
+        association_id: str,
+        master: MasterChore | None = None,
+    ) -> ChoreInstance | None:
+        """Generate the next instance for an association.
+
+        Called by: association creation, instance completion, safety net.
+        Checks limits (end_date, max_occurrences), calculates the next period,
+        and creates an instance if one doesn't already exist for that period.
+
+        Args:
+            association_id: FK to the association to generate for.
+            master: Optional pre-fetched master chore (avoids extra query).
+
+        Returns:
+            The newly created ChoreInstance, or None if limits reached
+            or an instance already exists for the target period.
+        """
+        if master is None:
+            association = await self.repository.get_association(association_id)
+            if not association:
+                return None
+            master = await self.repository.get_master_chore_by_id(association.master_chore_id)
+            if not master:
+                return None
+
+        if master.status != MasterChoreStatus.ACTIVE:
+            return None
+
+        if master.recurrence_rule is None:
+            return None
+
+        rule = RecurrenceRule(**master.recurrence_rule)
+        today = datetime.now(UTC).date()
+        now_time = datetime.now(UTC).strftime("%H:%M")
+
+        next_date = get_next_occurrence(rule, today, now_time)
+
+        if master.end_date and next_date > master.end_date:
+            logger.info(
+                "generate_instance_skipped_end_date",
+                association_id=association_id,
+                next_date=next_date.isoformat(),
+                end_date=master.end_date.isoformat(),
+            )
+            return None
+
+        if master.max_occurrences and master.occurrence_count >= master.max_occurrences:
+            logger.info(
+                "generate_instance_skipped_max_occurrences",
+                association_id=association_id,
+                occurrence_count=master.occurrence_count,
+                max_occurrences=master.max_occurrences,
+            )
+            return None
+
+        period_start, period_end = calculate_period(rule, next_date)
+
+        if period_start is None or period_end is None:
+            return None
+
+        existing = await self.repository.get_instance_for_period(
+            association_id, period_start, period_end
+        )
+        if existing:
+            return existing
+
+        association = await self.repository.get_association(association_id)
+        if not association:
+            return None
+
+        instance = ChoreInstance(
+            id=str(uuid4()),
+            master_chore_id=master.id,
+            association_id=association_id,
+            period_start=period_start,
+            period_end=period_end,
+            status=InstanceStatus.ACTIVE,
+            claimed_by=association.member_id if not association.is_open_pool else None,
+            assigned_to=association.member_id if not association.is_open_pool else None,
+        )
+
+        created = await self.repository.create_instance(instance)
+
+        await self.repository.update_master_chore(
+            master.id,
+            {"occurrence_count": master.occurrence_count + 1},
+        )
+
+        logger.info(
+            "generate_instance",
+            instance_id=created.id,
+            association_id=association_id,
+            period_start=period_start.isoformat(),
+            period_end=period_end.isoformat(),
+        )
+
+        return created
+
+    async def ensure_current_instances(self) -> list[ChoreInstance]:
+        """Safety net: ensure every active association has a current instance.
+
+        Called on board load to catch any missed generations. For each active
+        association with an active master, checks if an instance exists for
+        the current period and generates one if missing.
+
+        Returns:
+            List of newly created instances (empty if all were up to date).
+        """
+        generated: list[ChoreInstance] = []
+
+        associations = await self.repository.list_associations()
+        masters_cache: dict[str, MasterChore | None] = {}
+
+        for association in associations:
+            master_id = association.master_chore_id
+            if master_id not in masters_cache:
+                masters_cache[master_id] = await self.repository.get_master_chore_by_id(master_id)
+
+            master = masters_cache[master_id]
+            if not master or master.status != MasterChoreStatus.ACTIVE:
+                continue
+
+            if master.recurrence_rule is None:
+                continue
+
+            result = await self.generate_instance_for_association(association.id, master)
+            if result and result.status == InstanceStatus.ACTIVE:
+                generated.append(result)
+
+        if generated:
+            logger.info("ensure_current_instances", count=len(generated))
+
+        return generated

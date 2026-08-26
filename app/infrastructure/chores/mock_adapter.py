@@ -5,7 +5,7 @@ the Haider family members (faiyaz, trisha, arya, raya).
 """
 
 import copy
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 
 from app.domain.chores.models import (
@@ -605,3 +605,29 @@ class MockChoresRepository:
                 instance.updated_at = datetime.now(UTC)
                 archived_count += 1
         return archived_count
+
+    async def get_instance_for_period(
+        self,
+        association_id: str,
+        period_start: date,
+        period_end: date,
+    ) -> ChoreInstance | None:
+        """Find an existing instance for a specific period and association.
+
+        Args:
+            association_id: FK to the association.
+            period_start: Period start date to match.
+            period_end: Period end date to match.
+
+        Returns:
+            ChoreInstance if found, None otherwise.
+        """
+        for instance in self._instances:
+            if (
+                instance.association_id == association_id
+                and instance.period_start == period_start
+                and instance.period_end == period_end
+                and instance.status != InstanceStatus.ARCHIVED
+            ):
+                return instance
+        return None
