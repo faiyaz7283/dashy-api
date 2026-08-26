@@ -34,12 +34,12 @@ def service(repository: MockChoresRepository) -> ChoresService:
     return ChoresService(repository=repository)
 
 
-class TestApprovalFlow:
-    """Tests for master chore approval logic."""
+class TestMasterChoreCreation:
+    """Tests for master chore creation."""
 
     @pytest.mark.asyncio
-    async def test_adult_creator_auto_approves(self, service: ChoresService) -> None:
-        """Test that adult creators auto-approve their master chores."""
+    async def test_create_master_chore_active(self, service: ChoresService) -> None:
+        """Test that new master chores are created as active."""
         chore = MasterChore(
             id="test-001",
             name="Test Chore",
@@ -50,83 +50,28 @@ class TestApprovalFlow:
         result = await service.create_master_chore(
             chore=chore,
             tag_ids=[],
-            is_adult_creator=True,
         )
 
         assert result.status == MasterChoreStatus.ACTIVE
-        assert result.approved_by == "faiyaz"
+        assert result.created_by == "faiyaz"
 
     @pytest.mark.asyncio
-    async def test_kid_creator_without_approver_pending(self, service: ChoresService) -> None:
-        """Test that kid creators without approver get pending status."""
+    async def test_create_master_chore_with_tags(self, service: ChoresService) -> None:
+        """Test creating a master chore with tags."""
         chore = MasterChore(
             id="test-002",
-            name="Test Chore",
+            name="Tagged Chore",
             category_id="cat-kitchen",
-            created_by="arya",
+            created_by="trisha",
         )
 
         result = await service.create_master_chore(
             chore=chore,
-            tag_ids=[],
-            is_adult_creator=False,
-        )
-
-        assert result.status == MasterChoreStatus.PENDING_APPROVAL
-        assert result.approved_by is None
-
-    @pytest.mark.asyncio
-    async def test_kid_creator_with_approver_auto_approves(self, service: ChoresService) -> None:
-        """Test that kid creators with a selected approver auto-approve."""
-        chore = MasterChore(
-            id="test-003",
-            name="Test Chore",
-            category_id="cat-kitchen",
-            created_by="arya",
-        )
-
-        result = await service.create_master_chore(
-            chore=chore,
-            tag_ids=[],
-            is_adult_creator=False,
-            approver_id="faiyaz",
+            tag_ids=["tag-quick", "tag-physical"],
         )
 
         assert result.status == MasterChoreStatus.ACTIVE
-        assert result.approved_by == "faiyaz"
-
-    @pytest.mark.asyncio
-    async def test_approve_pending_master(self, service: ChoresService) -> None:
-        """Test approving a pending master chore."""
-        # First create a pending master
-        chore = MasterChore(
-            id="test-004",
-            name="Pending Chore",
-            category_id="cat-kitchen",
-            created_by="arya",
-            status=MasterChoreStatus.PENDING_APPROVAL,
-        )
-        repo = service.repository
-        await repo.create_master_chore(chore, [])
-
-        # Now approve it
-        result = await service.approve_master_chore("test-004", "trisha")
-
-        assert result.status == MasterChoreStatus.ACTIVE
-        assert result.approved_by == "trisha"
-
-    @pytest.mark.asyncio
-    async def test_approve_non_pending_raises(self, service: ChoresService) -> None:
-        """Test that approving an already-active master raises ValueError."""
-        # The mock adapter has master-001 which is already active
-        with pytest.raises(ValueError, match="not pending approval"):
-            await service.approve_master_chore("master-001", "faiyaz")
-
-    @pytest.mark.asyncio
-    async def test_approve_nonexistent_raises(self, service: ChoresService) -> None:
-        """Test that approving a nonexistent master raises ValueError."""
-        with pytest.raises(ValueError, match="not found"):
-            await service.approve_master_chore("nonexistent", "faiyaz")
+        assert len(result.tags) == 2
 
 
 class TestClaimAssignExclusivity:
@@ -165,55 +110,22 @@ class TestClaimAssignExclusivity:
             await service.assign_instance("nonexistent", "raya", "trisha")
 
 
-class TestCompletionSignoff:
-    """Tests for completion and signoff flow."""
+class TestInstanceCompletion:
+    """Tests for instance completion flow."""
 
     @pytest.mark.asyncio
-    async def test_adult_completion_immediate(self, service: ChoresService) -> None:
-        """Test that adult completion goes straight to completed."""
+    async def test_completion_sets_completed(self, service: ChoresService) -> None:
+        """Test that any member can complete an instance."""
         # inst-001 is open/active
         result = await service.update_instance_status(
             "inst-001",
             InstanceStatus.COMPLETED,
-            actor_id="faiyaz",
-            is_adult=True,
+            actor_id="arya",
         )
 
         assert result.status == InstanceStatus.COMPLETED
-        assert result.completed_by == "faiyaz"
-        assert result.completed_at is not None
-
-    @pytest.mark.asyncio
-    async def test_kid_completion_pending_signoff(self, service: ChoresService) -> None:
-        """Test that kid completion goes to completed_pending_signoff."""
-        # inst-002 is open/active
-        result = await service.update_instance_status(
-            "inst-002",
-            InstanceStatus.COMPLETED_PENDING_SIGNOFF,
-            actor_id="arya",
-            is_adult=False,
-        )
-
-        assert result.status == InstanceStatus.COMPLETED_PENDING_SIGNOFF
         assert result.completed_by == "arya"
         assert result.completed_at is not None
-
-    @pytest.mark.asyncio
-    async def test_signoff_completes_instance(self, service: ChoresService) -> None:
-        """Test that parent signoff transitions to completed."""
-        # inst-005 is completed_pending_signoff
-        result = await service.signoff_instance("inst-005", "faiyaz")
-
-        assert result.status == InstanceStatus.COMPLETED
-        assert result.signoff_by == "faiyaz"
-        assert result.signed_off_at is not None
-
-    @pytest.mark.asyncio
-    async def test_signoff_non_pending_raises(self, service: ChoresService) -> None:
-        """Test that signing off a non-pending instance raises ValueError."""
-        # inst-006 is already completed
-        with pytest.raises(ValueError, match="not pending signoff"):
-            await service.signoff_instance("inst-006", "faiyaz")
 
     @pytest.mark.asyncio
     async def test_in_progress_sets_started_at(self, service: ChoresService) -> None:
@@ -239,10 +151,12 @@ class TestGetAllData:
         assert "categories" in data
         assert "tags" in data
         assert "master_chores" in data
+        assert "associations" in data
         assert "instances" in data
         assert isinstance(data["categories"], list)
         assert isinstance(data["tags"], list)
         assert isinstance(data["master_chores"], list)
+        assert isinstance(data["associations"], list)
         assert isinstance(data["instances"], list)
 
     @pytest.mark.asyncio
@@ -253,6 +167,7 @@ class TestGetAllData:
         assert len(data["categories"]) == 5  # preset categories
         assert len(data["tags"]) == 5  # sample tags
         assert len(data["master_chores"]) > 0
+        assert len(data["associations"]) > 0
         assert len(data["instances"]) > 0
 
 

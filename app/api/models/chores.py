@@ -39,13 +39,17 @@ class MasterChoreResponse(BaseModel):
         category: The chore's category.
         tags: Associated tags.
         difficulty: Difficulty level (1-5).
-        frequency: Recurrence frequency.
+        recurrence_rule: Recurrence pattern config (JSON).
         estimated_minutes: Optional time estimate.
         due_time: Optional time-of-day deadline.
         due_date: Optional specific due date.
         expiration_behavior: What happens when period ends.
+        end_date: Stop generating after this date.
+        max_occurrences: Stop after N total instances.
+        occurrence_count: Total instances generated so far.
+        conditions: Conditional chore conditions (JSON).
+        is_collaborative: Whether multiple members can have instances.
         created_by: Member ID of the creator.
-        approved_by: Member ID of the approver.
         status: Current lifecycle status.
         created_at: ISO datetime of creation.
         updated_at: ISO datetime of last update.
@@ -57,13 +61,17 @@ class MasterChoreResponse(BaseModel):
     category: ChoreCategoryResponse
     tags: list[ChoreTagResponse]
     difficulty: int
-    frequency: str
+    recurrence_rule: dict | None = None
     estimated_minutes: int | None = None
     due_time: str | None = None
     due_date: str | None = None
     expiration_behavior: str
+    end_date: str | None = None
+    max_occurrences: int | None = None
+    occurrence_count: int = 0
+    conditions: dict | None = None
+    is_collaborative: bool = False
     created_by: str
-    approved_by: str | None = None
     status: str
     created_at: str
     updated_at: str
@@ -76,6 +84,7 @@ class ChoreInstanceResponse(BaseModel):
     Attributes:
         id: Unique identifier.
         master_chore_id: Parent master chore ID.
+        association_id: FK to the association that generated this instance.
         period_start: Period start date (ISO string).
         period_end: Period end date (ISO string).
         status: Current lifecycle status.
@@ -83,16 +92,15 @@ class ChoreInstanceResponse(BaseModel):
         assigned_to: Member ID who was assigned.
         assigned_by: Member ID who made the assignment.
         completed_by: Member ID who marked complete.
-        signoff_by: Member ID who signed off.
         started_at: ISO datetime when work began.
         completed_at: ISO datetime when marked complete.
-        signed_off_at: ISO datetime when signed off.
         created_at: ISO datetime of creation.
         updated_at: ISO datetime of last update.
     """
 
     id: str
     master_chore_id: str
+    association_id: str | None = None
     period_start: str | None = None
     period_end: str | None = None
     status: str
@@ -100,12 +108,34 @@ class ChoreInstanceResponse(BaseModel):
     assigned_to: str | None = None
     assigned_by: str | None = None
     completed_by: str | None = None
-    signoff_by: str | None = None
     started_at: str | None = None
     completed_at: str | None = None
-    signed_off_at: str | None = None
     created_at: str
     updated_at: str
+
+
+class AssociationResponse(BaseModel):
+    """Response model for a chore association.
+
+    Attributes:
+        id: Unique identifier.
+        master_chore_id: Parent master chore ID.
+        member_id: Member ID (None for open pool).
+        is_open_pool: Whether this is an open pool.
+        created_by: Member ID who created this association.
+        created_at: ISO datetime of creation.
+        updated_at: ISO datetime of last update.
+        removed_at: ISO datetime of soft-delete (None if active).
+    """
+
+    id: str
+    master_chore_id: str
+    member_id: str | None = None
+    is_open_pool: bool = False
+    created_by: str
+    created_at: str
+    updated_at: str
+    removed_at: str | None = None
 
 
 class ChoresResponse(BaseModel):
@@ -115,12 +145,14 @@ class ChoresResponse(BaseModel):
         categories: All chore categories.
         tags: All chore tags.
         master_chores: All master chore templates.
+        associations: All chore associations.
         instances: All chore instances.
     """
 
     categories: list[ChoreCategoryResponse]
     tags: list[ChoreTagResponse]
     master_chores: list[MasterChoreResponse]
+    associations: list[AssociationResponse]
     instances: list[ChoreInstanceResponse]
 
 
@@ -132,26 +164,32 @@ class CreateMasterChoreRequest(BaseModel):
         category_id: Category to assign.
         tag_ids: Tags to associate.
         difficulty: Difficulty level (1-5).
-        frequency: Recurrence frequency.
+        recurrence_rule: Recurrence pattern config (JSON).
         estimated_minutes: Optional time estimate.
         due_time: Optional time-of-day deadline.
         due_date: Optional specific due date.
         expiration_behavior: What happens when period ends.
+        end_date: Stop generating after this date.
+        max_occurrences: Stop after N total instances.
+        conditions: Conditional chore conditions (JSON).
+        is_collaborative: Whether multiple members can have instances.
         created_by: Member ID of the creator.
-        approved_by: Optional approver (for kid creators).
     """
 
     name: str = Field(min_length=1, max_length=200)
     category_id: str
     tag_ids: list[str] = Field(default_factory=list)
     difficulty: int = Field(default=1, ge=1, le=5)
-    frequency: str = Field(default="once")
+    recurrence_rule: dict | None = None
     estimated_minutes: int | None = None
     due_time: str | None = None
     due_date: str | None = None
     expiration_behavior: str = Field(default="disappear")
+    end_date: str | None = None
+    max_occurrences: int | None = None
+    conditions: dict | None = None
+    is_collaborative: bool = False
     created_by: str
-    approved_by: str | None = None
 
 
 class UpdateMasterChoreRequest(BaseModel):
@@ -164,22 +202,48 @@ class UpdateMasterChoreRequest(BaseModel):
         category_id: Category to assign.
         tag_ids: Tags to associate.
         difficulty: Difficulty level (1-5).
-        frequency: Recurrence frequency.
+        recurrence_rule: Recurrence pattern config (JSON).
         estimated_minutes: Optional time estimate.
         due_time: Optional time-of-day deadline.
         due_date: Optional specific due date.
         expiration_behavior: What happens when period ends.
+        end_date: Stop generating after this date.
+        max_occurrences: Stop after N total instances.
+        conditions: Conditional chore conditions (JSON).
+        is_collaborative: Whether multiple members can have instances.
+        status: Lifecycle status.
     """
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
     category_id: str | None = None
     tag_ids: list[str] | None = None
     difficulty: int | None = Field(default=None, ge=1, le=5)
-    frequency: str | None = None
+    recurrence_rule: dict | None = None
     estimated_minutes: int | None = None
     due_time: str | None = None
     due_date: str | None = None
     expiration_behavior: str | None = None
+    end_date: str | None = None
+    max_occurrences: int | None = None
+    conditions: dict | None = None
+    is_collaborative: bool | None = None
+    status: str | None = None
+
+
+class CreateAssociationRequest(BaseModel):
+    """Request body for creating a chore association.
+
+    Attributes:
+        master_chore_id: Master chore to associate.
+        member_id: Member to associate (None for open pool).
+        is_open_pool: Whether this is an open pool.
+        created_by: Member ID creating the association.
+    """
+
+    master_chore_id: str
+    member_id: str | None = None
+    is_open_pool: bool = False
+    created_by: str
 
 
 class CreateCategoryRequest(BaseModel):
@@ -217,7 +281,7 @@ class AssignInstanceRequest(BaseModel):
 
     Attributes:
         assignee_id: Member ID being assigned.
-        assigner_id: Member ID making the assignment (parent).
+        assigner_id: Member ID making the assignment.
     """
 
     assignee_id: str
@@ -230,29 +294,7 @@ class UpdateInstanceStatusRequest(BaseModel):
     Attributes:
         status: Target status value.
         actor_id: Member ID performing the action.
-        is_adult: Whether the actor is an adult (affects completion flow).
     """
 
     status: str
     actor_id: str
-    is_adult: bool = True
-
-
-class ApproveMasterChoreRequest(BaseModel):
-    """Request body for approving a master chore.
-
-    Attributes:
-        approver_id: Member ID of the approving adult.
-    """
-
-    approver_id: str
-
-
-class SignoffInstanceRequest(BaseModel):
-    """Request body for signing off on a completed instance.
-
-    Attributes:
-        signoff_member_id: Parent member ID signing off.
-    """
-
-    signoff_member_id: str

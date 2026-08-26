@@ -1,6 +1,6 @@
 """Chores repository implementation using SQLModel."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,16 +8,17 @@ from sqlmodel import select
 
 from app.core.logging import get_logger
 from app.domain.chores.models import (
+    ChoreAssociation,
     ChoreCategory,
     ChoreInstance,
     ChoreTag,
     ExpirationBehavior,
-    Frequency,
     InstanceStatus,
     MasterChore,
     MasterChoreStatus,
 )
 from app.infrastructure.persistence.models import (
+    ChoreAssociationDB,
     ChoreCategoryDB,
     ChoreInstanceDB,
     ChoreTagDB,
@@ -222,7 +223,7 @@ class ChoresRepositoryImpl:
         result = await self.session.execute(statement)
         db_master = result.scalar_one_or_none()
         if db_master:
-            db_master.deleted_at = datetime.utcnow()
+            db_master.deleted_at = datetime.now(UTC)
             db_master.status = MasterChoreStatus.ARCHIVED.value
             self.session.add(db_master)
             await self.session.commit()
@@ -303,7 +304,6 @@ class ChoresRepositoryImpl:
                 if key in (
                     "started_at",
                     "completed_at",
-                    "signed_off_at",
                     "period_start",
                     "period_end",
                 ) and isinstance(value, datetime):
@@ -327,6 +327,101 @@ class ChoresRepositoryImpl:
         if db_instance:
             await self.session.delete(db_instance)
             await self.session.commit()
+
+    # ── Associations ───────────────────────────────────────────
+
+    async def get_association(self, association_id: str) -> ChoreAssociation | None:
+        """Retrieve a single chore association by ID.
+
+        Args:
+            association_id: Unique identifier for the association.
+
+        Returns:
+            Domain ChoreAssociation if found, None otherwise.
+        """
+        statement = select(ChoreAssociationDB).where(ChoreAssociationDB.id == association_id)
+        result = await self.session.execute(statement)
+        db_association = result.scalar_one_or_none()
+        return self._association_to_domain(db_association) if db_association else None
+
+    async def create_association(self, association: ChoreAssociation) -> ChoreAssociation:
+        """Create a new chore association.
+
+        Args:
+            association: Domain ChoreAssociation to persist.
+
+        Returns:
+            The created domain ChoreAssociation.
+        """
+        db_association = self._association_to_db(association)
+        self.session.add(db_association)
+        await self.session.commit()
+        await self.session.refresh(db_association)
+        return self._association_to_domain(db_association)
+
+    async def delete_association(self, association_id: str) -> None:
+        """Soft-delete a chore association by setting removed_at.
+
+        Args:
+            association_id: Unique identifier for the association.
+        """
+        statement = select(ChoreAssociationDB).where(ChoreAssociationDB.id == association_id)
+        result = await self.session.execute(statement)
+        db_association = result.scalar_one_or_none()
+        if db_association:
+            db_association.removed_at = datetime.now(UTC)
+            self.session.add(db_association)
+            await self.session.commit()
+
+    async def list_associations(
+        self,
+        master_chore_id: str | None = None,
+        member_id: str | None = None,
+        include_removed: bool = False,
+    ) -> list[ChoreAssociation]:
+        """Retrieve chore associations with optional filters.
+
+        Args:
+            master_chore_id: Filter by master chore ID.
+            member_id: Filter by member ID.
+            include_removed: Whether to include soft-deleted associations.
+
+        Returns:
+            List of domain ChoreAssociation entities.
+        """
+        statement = select(ChoreAssociationDB)
+        if not include_removed:
+            statement = statement.where(ChoreAssociationDB.removed_at.is_(None))
+        if master_chore_id:
+            statement = statement.where(ChoreAssociationDB.master_chore_id == master_chore_id)
+        if member_id:
+            statement = statement.where(ChoreAssociationDB.member_id == member_id)
+        statement = statement.order_by(ChoreAssociationDB.created_at.desc())
+        result = await self.session.execute(statement)
+        db_associations = result.scalars().all()
+        return [self._association_to_domain(db_assoc) for db_assoc in db_associations]
+
+    async def get_associations_by_master(self, master_chore_id: str) -> list[ChoreAssociation]:
+        """Retrieve all active associations for a master chore.
+
+        Args:
+            master_chore_id: Unique identifier for the master chore.
+
+        Returns:
+            List of active domain ChoreAssociation entities.
+        """
+        return await self.list_associations(master_chore_id=master_chore_id)
+
+    async def get_associations_by_member(self, member_id: str) -> list[ChoreAssociation]:
+        """Retrieve all active associations for a member.
+
+        Args:
+            member_id: Unique identifier for the member.
+
+        Returns:
+            List of active domain ChoreAssociation entities.
+        """
+        return await self.list_associations(member_id=member_id)
 
     # ── Private helpers ─────────────────────────────────────────
 
@@ -418,13 +513,17 @@ class ChoresRepositoryImpl:
             category_id=db_master.category_id,
             tags=tags,
             difficulty=db_master.difficulty,
-            frequency=Frequency(db_master.frequency),
+            recurrence_rule=db_master.recurrence_rule,
             estimated_minutes=db_master.estimated_minutes,
             due_time=db_master.due_time,
             due_date=db_master.due_date,
             expiration_behavior=ExpirationBehavior(db_master.expiration_behavior),
+            end_date=db_master.end_date,
+            max_occurrences=db_master.max_occurrences,
+            occurrence_count=db_master.occurrence_count,
+            conditions=db_master.conditions,
+            is_collaborative=db_master.is_collaborative,
             created_by=db_master.created_by,
-            approved_by=db_master.approved_by,
             status=MasterChoreStatus(db_master.status),
             created_at=db_master.created_at,
             updated_at=db_master.updated_at,
@@ -446,13 +545,17 @@ class ChoresRepositoryImpl:
             name=chore.name,
             category_id=chore.category_id,
             difficulty=chore.difficulty,
-            frequency=chore.frequency.value,
+            recurrence_rule=chore.recurrence_rule,
             estimated_minutes=chore.estimated_minutes,
             due_time=chore.due_time,
             due_date=chore.due_date,
             expiration_behavior=chore.expiration_behavior.value,
+            end_date=chore.end_date,
+            max_occurrences=chore.max_occurrences,
+            occurrence_count=chore.occurrence_count,
+            conditions=chore.conditions,
+            is_collaborative=chore.is_collaborative,
             created_by=chore.created_by,
-            approved_by=chore.approved_by,
             status=chore.status.value,
             created_at=chore.created_at,
             updated_at=chore.updated_at,
@@ -472,6 +575,7 @@ class ChoresRepositoryImpl:
         return ChoreInstance(
             id=db_instance.id,
             master_chore_id=db_instance.master_chore_id,
+            association_id=db_instance.association_id,
             period_start=db_instance.period_start,
             period_end=db_instance.period_end,
             status=InstanceStatus(db_instance.status),
@@ -479,10 +583,8 @@ class ChoresRepositoryImpl:
             assigned_to=db_instance.assigned_to,
             assigned_by=db_instance.assigned_by,
             completed_by=db_instance.completed_by,
-            signoff_by=db_instance.signoff_by,
             started_at=db_instance.started_at,
             completed_at=db_instance.completed_at,
-            signed_off_at=db_instance.signed_off_at,
             created_at=db_instance.created_at,
             updated_at=db_instance.updated_at,
         )
@@ -500,6 +602,7 @@ class ChoresRepositoryImpl:
         return ChoreInstanceDB(
             id=instance.id,
             master_chore_id=instance.master_chore_id,
+            association_id=instance.association_id,
             period_start=instance.period_start,
             period_end=instance.period_end,
             status=instance.status.value,
@@ -507,10 +610,50 @@ class ChoresRepositoryImpl:
             assigned_to=instance.assigned_to,
             assigned_by=instance.assigned_by,
             completed_by=instance.completed_by,
-            signoff_by=instance.signoff_by,
             started_at=instance.started_at,
             completed_at=instance.completed_at,
-            signed_off_at=instance.signed_off_at,
             created_at=instance.created_at,
             updated_at=instance.updated_at,
+        )
+
+    @staticmethod
+    def _association_to_domain(db_association: ChoreAssociationDB) -> ChoreAssociation:
+        """Convert database model to domain model.
+
+        Args:
+            db_association: Database ChoreAssociationDB row.
+
+        Returns:
+            Domain ChoreAssociation entity.
+        """
+        return ChoreAssociation(
+            id=db_association.id,
+            master_chore_id=db_association.master_chore_id,
+            member_id=db_association.member_id,
+            is_open_pool=db_association.is_open_pool,
+            created_by=db_association.created_by,
+            created_at=db_association.created_at,
+            updated_at=db_association.updated_at,
+            removed_at=db_association.removed_at,
+        )
+
+    @staticmethod
+    def _association_to_db(association: ChoreAssociation) -> ChoreAssociationDB:
+        """Convert domain model to database model.
+
+        Args:
+            association: Domain ChoreAssociation entity.
+
+        Returns:
+            Database ChoreAssociationDB row ready for insertion.
+        """
+        return ChoreAssociationDB(
+            id=association.id,
+            master_chore_id=association.master_chore_id,
+            member_id=association.member_id,
+            is_open_pool=association.is_open_pool,
+            created_by=association.created_by,
+            created_at=association.created_at,
+            updated_at=association.updated_at,
+            removed_at=association.removed_at,
         )

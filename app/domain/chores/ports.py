@@ -6,6 +6,7 @@ Defines the contracts for chores data access.
 from typing import Protocol
 
 from app.domain.chores.models import (
+    ChoreAssociation,
     ChoreCategory,
     ChoreInstance,
     ChoreTag,
@@ -162,5 +163,75 @@ class ChoresRepository(Protocol):
 
         Args:
             instance_id: Unique identifier for the instance.
+        """
+        ...
+
+    async def get_association(self, association_id: str) -> ChoreAssociation | None:
+        """Retrieve a single chore association by ID.
+
+        Args:
+            association_id: Unique identifier for the association.
+
+        Returns:
+            ChoreAssociation if found, None otherwise.
+        """
+        ...
+
+    async def create_association(self, association: ChoreAssociation) -> ChoreAssociation:
+        """Create a new chore association.
+
+        Args:
+            association: ChoreAssociation entity to persist.
+
+        Returns:
+            The newly created association.
+        """
+        ...
+
+    async def delete_association(self, association_id: str) -> None:
+        """Soft-delete a chore association by setting removed_at.
+
+        Args:
+            association_id: Unique identifier for the association.
+        """
+        ...
+
+    async def list_associations(
+        self,
+        master_chore_id: str | None = None,
+        member_id: str | None = None,
+        include_removed: bool = False,
+    ) -> list[ChoreAssociation]:
+        """Retrieve chore associations with optional filters.
+
+        Args:
+            master_chore_id: Filter by master chore ID.
+            member_id: Filter by member ID.
+            include_removed: Whether to include soft-deleted associations.
+
+        Returns:
+            List of chore associations.
+        """
+        ...
+
+    async def get_associations_by_master(self, master_chore_id: str) -> list[ChoreAssociation]:
+        """Retrieve all active associations for a master chore.
+
+        Args:
+            master_chore_id: Unique identifier for the master chore.
+
+        Returns:
+            List of active chore associations.
+        """
+        ...
+
+    async def get_associations_by_member(self, member_id: str) -> list[ChoreAssociation]:
+        """Retrieve all active associations for a member.
+
+        Args:
+            member_id: Unique identifier for the member.
+
+        Returns:
+            List of active chore associations.
         """
         ...

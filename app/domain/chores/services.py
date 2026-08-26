@@ -1,13 +1,14 @@
 """Chores domain services.
 
-Business logic for chore management including approval flow,
-claim/assign mutual exclusivity, and completion/signoff flow.
+Business logic for chore management including claim/assign
+mutual exclusivity and instance status transitions.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.core.logging import get_logger
 from app.domain.chores.models import (
+    ChoreAssociation,
     ChoreCategory,
     ChoreInstance,
     ChoreTag,
@@ -24,8 +25,8 @@ class ChoresService:
     """Service for chore operations.
 
     Encapsulates business logic for managing master chores, instances,
-    categories, and tags. Handles approval flow, claim/assign exclusivity,
-    and completion/signoff rules.
+    associations, categories, and tags. Handles claim/assign exclusivity
+    and instance status transitions.
     """
 
     def __init__(self, repository: ChoresRepository) -> None:
@@ -39,20 +40,22 @@ class ChoresService:
     async def get_all_data(self) -> dict:
         """Retrieve all chores data in a single call.
 
-        Returns categories, tags, master chores, and instances
-        for the frontend to render the chore board.
+        Returns categories, tags, master chores, associations,
+        and instances for the frontend to render the chore board.
 
         Returns:
-            Dict with keys: categories, tags, master_chores, instances.
+            Dict with keys: categories, tags, master_chores, associations, instances.
         """
         categories = await self.repository.get_categories()
         tags = await self.repository.get_tags()
         master_chores = await self.repository.get_master_chores()
+        associations = await self.repository.list_associations()
         instances = await self.repository.get_instances()
         return {
             "categories": categories,
             "tags": tags,
             "master_chores": master_chores,
+            "associations": associations,
             "instances": instances,
         }
 
@@ -109,77 +112,27 @@ class ChoresService:
         self,
         chore: MasterChore,
         tag_ids: list[str],
-        is_adult_creator: bool,
-        approver_id: str | None = None,
     ) -> MasterChore:
-        """Create a master chore with approval logic.
+        """Create a new master chore.
 
-        Approval rules:
-        - Adult creators: auto-approve (status=active).
-        - Kid creators with a selected approver: auto-approve (status=active).
-        - Kid creators without an approver: pending_approval.
+        All masters start as active — no approval flow.
 
         Args:
             chore: MasterChore entity to create.
             tag_ids: List of tag IDs to associate.
-            is_adult_creator: Whether the creator is an adult.
-            approver_id: Optional approver member ID selected by a kid creator.
 
         Returns:
-            The created master chore with appropriate status.
+            The created master chore.
         """
-        if is_adult_creator:
-            chore.status = MasterChoreStatus.ACTIVE
-            chore.approved_by = chore.created_by
-        elif approver_id:
-            chore.status = MasterChoreStatus.ACTIVE
-            chore.approved_by = approver_id
-        else:
-            chore.status = MasterChoreStatus.PENDING_APPROVAL
+        chore.status = MasterChoreStatus.ACTIVE
 
         logger.info(
             "create_master_chore",
             chore_id=chore.id,
             name=chore.name,
-            status=chore.status.value,
             created_by=chore.created_by,
         )
         return await self.repository.create_master_chore(chore, tag_ids)
-
-    async def approve_master_chore(self, chore_id: str, approver_id: str) -> MasterChore:
-        """Approve a pending master chore.
-
-        Args:
-            chore_id: Unique identifier for the master chore.
-            approver_id: Member ID of the approving adult.
-
-        Returns:
-            The approved master chore.
-
-        Raises:
-            ValueError: If the master chore is not found or not pending.
-        """
-        chore = await self.repository.get_master_chore_by_id(chore_id)
-        if not chore:
-            raise ValueError(f"Master chore '{chore_id}' not found")
-        if chore.status != MasterChoreStatus.PENDING_APPROVAL:
-            raise ValueError(
-                f"Master chore '{chore_id}' is not pending approval "
-                f"(current status: {chore.status.value})"
-            )
-
-        logger.info(
-            "approve_master_chore",
-            chore_id=chore_id,
-            approver_id=approver_id,
-        )
-        return await self.repository.update_master_chore(
-            chore_id,
-            {
-                "status": MasterChoreStatus.ACTIVE,
-                "approved_by": approver_id,
-            },
-        )
 
     async def update_master_chore(
         self, chore_id: str, updates: dict, tag_ids: list[str] | None = None
@@ -194,7 +147,7 @@ class ChoresService:
         Returns:
             The updated master chore.
         """
-        updates["updated_at"] = datetime.utcnow()
+        updates["updated_at"] = datetime.now(UTC)
         return await self.repository.update_master_chore(chore_id, updates)
 
     async def delete_master_chore(self, chore_id: str) -> None:
@@ -266,7 +219,7 @@ class ChoresService:
         Args:
             instance_id: Unique identifier for the instance.
             assignee_id: Member ID being assigned.
-            assigner_id: Member ID making the assignment (parent).
+            assigner_id: Member ID making the assignment.
 
         Returns:
             The updated instance.
@@ -297,20 +250,15 @@ class ChoresService:
         instance_id: str,
         new_status: InstanceStatus,
         actor_id: str,
-        is_adult: bool = True,
     ) -> ChoreInstance:
         """Update the status of a chore instance.
 
-        Completion flow:
-        - Kid completes: status becomes completed_pending_signoff.
-        - Adult completes: status becomes completed immediately.
-        - Parent signoff: status becomes completed.
+        Any member can complete any instance — no approval or signoff required.
 
         Args:
             instance_id: Unique identifier for the instance.
             new_status: The target status.
             actor_id: Member ID performing the action.
-            is_adult: Whether the actor is an adult.
 
         Returns:
             The updated instance.
@@ -322,36 +270,17 @@ class ChoresService:
         if not instance:
             raise ValueError(f"Instance '{instance_id}' not found")
 
-        now_iso = datetime.utcnow().isoformat()
-        updates: dict = {"updated_at": datetime.utcnow()}
+        now_iso = datetime.now(UTC).isoformat()
+        updates: dict = {"updated_at": datetime.now(UTC)}
 
         if new_status == InstanceStatus.IN_PROGRESS:
             updates["status"] = InstanceStatus.IN_PROGRESS
             updates["started_at"] = now_iso
 
         elif new_status == InstanceStatus.COMPLETED:
-            if is_adult:
-                # Adult self-completes — no signoff needed
-                updates["status"] = InstanceStatus.COMPLETED
-                updates["completed_by"] = actor_id
-                updates["completed_at"] = now_iso
-            else:
-                # This shouldn't happen directly for kids — they get pending signoff
-                updates["status"] = InstanceStatus.COMPLETED
-                updates["completed_by"] = actor_id
-                updates["completed_at"] = now_iso
-
-        elif new_status == InstanceStatus.COMPLETED_PENDING_SIGNOFF:
-            # Kid marks complete — awaiting parent signoff
-            updates["status"] = InstanceStatus.COMPLETED_PENDING_SIGNOFF
+            updates["status"] = InstanceStatus.COMPLETED
             updates["completed_by"] = actor_id
             updates["completed_at"] = now_iso
-
-        elif new_status == InstanceStatus.COMPLETED and not is_adult:
-            # Signoff by parent
-            updates["status"] = InstanceStatus.COMPLETED
-            updates["signoff_by"] = actor_id
-            updates["signed_off_at"] = now_iso
 
         else:
             updates["status"] = new_status
@@ -364,41 +293,49 @@ class ChoresService:
         )
         return await self.repository.update_instance(instance_id, updates)
 
-    async def signoff_instance(self, instance_id: str, signoff_member_id: str) -> ChoreInstance:
-        """Sign off on a kid-completed chore instance.
+    # ── Associations ───────────────────────────────────────────
 
-        Transitions from completed_pending_signoff to completed.
+    async def get_associations(
+        self,
+        master_chore_id: str | None = None,
+        member_id: str | None = None,
+    ) -> list[ChoreAssociation]:
+        """Retrieve chore associations with optional filters.
 
         Args:
-            instance_id: Unique identifier for the instance.
-            signoff_member_id: Parent member ID signing off.
+            master_chore_id: Filter by master chore ID.
+            member_id: Filter by member ID.
 
         Returns:
-            The updated instance.
-
-        Raises:
-            ValueError: If the instance is not found or not pending signoff.
+            List of active chore associations.
         """
-        instance = await self.repository.get_instance_by_id(instance_id)
-        if not instance:
-            raise ValueError(f"Instance '{instance_id}' not found")
-        if instance.status != InstanceStatus.COMPLETED_PENDING_SIGNOFF:
-            raise ValueError(
-                f"Instance '{instance_id}' is not pending signoff "
-                f"(current status: {instance.status.value})"
-            )
-
-        now_iso = datetime.utcnow().isoformat()
-        updates: dict = {
-            "status": InstanceStatus.COMPLETED,
-            "signoff_by": signoff_member_id,
-            "signed_off_at": now_iso,
-            "updated_at": datetime.utcnow(),
-        }
-
-        logger.info(
-            "signoff_instance",
-            instance_id=instance_id,
-            signoff_member_id=signoff_member_id,
+        return await self.repository.list_associations(
+            master_chore_id=master_chore_id,
+            member_id=member_id,
         )
-        return await self.repository.update_instance(instance_id, updates)
+
+    async def create_association(self, association: ChoreAssociation) -> ChoreAssociation:
+        """Create a new association between a master chore and a member/pool.
+
+        Args:
+            association: ChoreAssociation entity to create.
+
+        Returns:
+            The created association.
+        """
+        logger.info(
+            "create_association",
+            association_id=association.id,
+            master_chore_id=association.master_chore_id,
+            member_id=association.member_id,
+        )
+        return await self.repository.create_association(association)
+
+    async def delete_association(self, association_id: str) -> None:
+        """Soft-delete an association.
+
+        Args:
+            association_id: Unique identifier for the association.
+        """
+        logger.info("delete_association", association_id=association_id)
+        await self.repository.delete_association(association_id)

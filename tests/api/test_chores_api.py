@@ -44,6 +44,7 @@ async def test_get_all_chores(client: AsyncClient) -> None:
     assert "categories" in data
     assert "tags" in data
     assert "master_chores" in data
+    assert "associations" in data
     assert "instances" in data
 
     # Verify categories have expected fields
@@ -69,9 +70,18 @@ async def test_get_all_chores(client: AsyncClient) -> None:
         assert "category" in master
         assert "tags" in master
         assert "difficulty" in master
-        assert "frequency" in master
+        assert "recurrence_rule" in master
         assert "status" in master
         assert "created_by" in master
+        assert "is_collaborative" in master
+
+    # Verify associations have expected fields
+    assert isinstance(data["associations"], list)
+    if data["associations"]:
+        assoc = data["associations"][0]
+        assert "id" in assoc
+        assert "master_chore_id" in assoc
+        assert "member_id" in assoc or "is_open_pool" in assoc
 
     # Verify instances have expected fields
     assert isinstance(data["instances"], list)
@@ -79,6 +89,7 @@ async def test_get_all_chores(client: AsyncClient) -> None:
         inst = data["instances"][0]
         assert "id" in inst
         assert "master_chore_id" in inst
+        assert "association_id" in inst
         assert "status" in inst
 
 
@@ -92,7 +103,7 @@ async def test_create_master_chore(client: AsyncClient) -> None:
             "category_id": "cat-kitchen",
             "tag_ids": [],
             "difficulty": 2,
-            "frequency": "daily",
+            "recurrence_rule": {"frequency": "daily", "time": "18:00"},
             "estimated_minutes": 10,
             "expiration_behavior": "carry_over",
             "created_by": "faiyaz",
@@ -102,59 +113,82 @@ async def test_create_master_chore(client: AsyncClient) -> None:
     data = response.json()
     assert data["name"] == "Test Chore"
     assert data["difficulty"] == 2
-    assert data["frequency"] == "daily"
-    assert data["status"] == "active"  # adult creator auto-approves
-    assert data["approved_by"] == "faiyaz"
+    assert data["recurrence_rule"]["frequency"] == "daily"
+    assert data["status"] == "active"
+    assert data["created_by"] == "faiyaz"
 
 
 @pytest.mark.asyncio
-async def test_create_master_chore_kid_pending(client: AsyncClient) -> None:
-    """Test that kid creator without approver gets pending status."""
+async def test_create_master_chore_with_conditions(client: AsyncClient) -> None:
+    """Test creating a conditional master chore."""
     response = await client.post(
         "/api/v1/chores/masters",
         json={
-            "name": "Kid's Chore",
-            "category_id": "cat-general",
+            "name": "Shovel Snow",
+            "category_id": "cat-outdoor",
             "tag_ids": [],
-            "difficulty": 1,
-            "frequency": "once",
+            "difficulty": 3,
+            "recurrence_rule": {"frequency": "daily", "time": "08:00"},
+            "conditions": {
+                "logic": "and",
+                "conditions": [
+                    {"type": "weather", "metric": "snowfall", "operator": "gt", "value": 0}
+                ]
+            },
             "expiration_behavior": "disappear",
-            "created_by": "arya",
+            "created_by": "faiyaz",
         },
     )
     assert response.status_code == 201
     data = response.json()
-    assert data["status"] == "pending_approval"
-    assert data["approved_by"] is None
+    assert data["name"] == "Shovel Snow"
+    assert data["conditions"] is not None
+    assert data["conditions"]["logic"] == "and"
 
 
 @pytest.mark.asyncio
-async def test_approve_master_chore(client: AsyncClient) -> None:
-    """Test POST /api/v1/chores/masters/{id}/approve."""
-    # First create a pending chore
-    create_resp = await client.post(
-        "/api/v1/chores/masters",
+async def test_create_association(client: AsyncClient) -> None:
+    """Test POST /api/v1/chores/associations creates an association."""
+    response = await client.post(
+        "/api/v1/chores/associations",
         json={
-            "name": "Pending Chore",
-            "category_id": "cat-kitchen",
-            "tag_ids": [],
-            "difficulty": 1,
-            "frequency": "once",
-            "expiration_behavior": "disappear",
-            "created_by": "raya",
+            "master_chore_id": "master-001",
+            "member_id": "arya",
+            "is_open_pool": False,
+            "created_by": "faiyaz",
         },
     )
-    chore_id = create_resp.json()["id"]
-
-    # Now approve it
-    response = await client.post(
-        f"/api/v1/chores/masters/{chore_id}/approve",
-        json={"approver_id": "trisha"},
-    )
-    assert response.status_code == 200
+    assert response.status_code == 201
     data = response.json()
-    assert data["status"] == "active"
-    assert data["approved_by"] == "trisha"
+    assert data["master_chore_id"] == "master-001"
+    assert data["member_id"] == "arya"
+    assert data["is_open_pool"] is False
+
+
+@pytest.mark.asyncio
+async def test_create_open_pool_association(client: AsyncClient) -> None:
+    """Test creating an open pool association."""
+    response = await client.post(
+        "/api/v1/chores/associations",
+        json={
+            "master_chore_id": "master-002",
+            "member_id": None,
+            "is_open_pool": True,
+            "created_by": "trisha",
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["master_chore_id"] == "master-002"
+    assert data["member_id"] is None
+    assert data["is_open_pool"] is True
+
+
+@pytest.mark.asyncio
+async def test_delete_association(client: AsyncClient) -> None:
+    """Test DELETE /api/v1/chores/associations/{id}."""
+    response = await client.delete("/api/v1/chores/associations/assoc-001")
+    assert response.status_code == 204
 
 
 @pytest.mark.asyncio
@@ -193,7 +227,6 @@ async def test_update_instance_status(client: AsyncClient) -> None:
         json={
             "status": "in_progress",
             "actor_id": "arya",
-            "is_adult": False,
         },
     )
     assert response.status_code == 200
@@ -203,18 +236,20 @@ async def test_update_instance_status(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_signoff_instance(client: AsyncClient) -> None:
-    """Test POST /api/v1/chores/instances/{id}/signoff."""
-    # inst-005 is completed_pending_signoff
-    response = await client.post(
-        "/api/v1/chores/instances/inst-005/signoff",
-        json={"signoff_member_id": "faiyaz"},
+async def test_complete_instance(client: AsyncClient) -> None:
+    """Test completing an instance."""
+    response = await client.put(
+        "/api/v1/chores/instances/inst-001/status",
+        json={
+            "status": "completed",
+            "actor_id": "arya",
+        },
     )
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "completed"
-    assert data["signoff_by"] == "faiyaz"
-    assert data["signed_off_at"] is not None
+    assert data["completed_by"] == "arya"
+    assert data["completed_at"] is not None
 
 
 @pytest.mark.asyncio
@@ -274,3 +309,17 @@ async def test_update_master_chore(client: AsyncClient) -> None:
     data = response.json()
     assert data["name"] == "Clean Bathroom Sink (Updated)"
     assert data["difficulty"] == 3
+
+
+@pytest.mark.asyncio
+async def test_update_master_chore_status(client: AsyncClient) -> None:
+    """Test updating master chore status."""
+    response = await client.put(
+        "/api/v1/chores/masters/master-001",
+        json={
+            "status": "inactive",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "inactive"

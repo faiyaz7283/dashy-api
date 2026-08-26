@@ -9,29 +9,30 @@ from fastapi import APIRouter, HTTPException
 
 from app.api.deps import ChoresServiceDep
 from app.api.models.chores import (
-    ApproveMasterChoreRequest,
     AssignInstanceRequest,
+    AssociationResponse,
     ChoreCategoryResponse,
     ChoreInstanceResponse,
     ChoresResponse,
     ChoreTagResponse,
     ClaimInstanceRequest,
+    CreateAssociationRequest,
     CreateCategoryRequest,
     CreateMasterChoreRequest,
     CreateTagRequest,
     MasterChoreResponse,
-    SignoffInstanceRequest,
     UpdateInstanceStatusRequest,
     UpdateMasterChoreRequest,
 )
 from app.domain.chores.models import (
+    ChoreAssociation,
     ChoreCategory,
     ChoreInstance,
     ChoreTag,
     ExpirationBehavior,
-    Frequency,
     InstanceStatus,
     MasterChore,
+    MasterChoreStatus,
 )
 
 router = APIRouter(prefix="/chores", tags=["chores"])
@@ -86,17 +87,25 @@ def _master_to_response(
         category=category_resp,
         tags=[_tag_to_response(t) for t in master.tags],
         difficulty=master.difficulty,
-        frequency=master.frequency.value,
+        recurrence_rule=master.recurrence_rule,
         estimated_minutes=master.estimated_minutes,
         due_time=master.due_time,
         due_date=master.due_date,
         expiration_behavior=master.expiration_behavior.value,
+        end_date=master.end_date,
+        max_occurrences=master.max_occurrences,
+        occurrence_count=master.occurrence_count,
+        conditions=master.conditions,
+        is_collaborative=master.is_collaborative,
         created_by=master.created_by,
-        approved_by=master.approved_by,
         status=master.status.value,
-        created_at=master.created_at.isoformat(),
-        updated_at=master.updated_at.isoformat(),
-        deleted_at=master.deleted_at.isoformat() if master.deleted_at else None,
+        created_at=master.created_at.isoformat(timespec="seconds") + "Z",
+        updated_at=master.updated_at.isoformat(timespec="seconds") + "Z",
+        deleted_at=(
+            master.deleted_at.isoformat(timespec="seconds") + "Z"
+            if master.deleted_at
+            else None
+        ),
     )
 
 
@@ -112,6 +121,7 @@ def _instance_to_response(instance: ChoreInstance) -> ChoreInstanceResponse:
     return ChoreInstanceResponse(
         id=instance.id,
         master_chore_id=instance.master_chore_id,
+        association_id=instance.association_id,
         period_start=instance.period_start,
         period_end=instance.period_end,
         status=instance.status.value,
@@ -119,12 +129,35 @@ def _instance_to_response(instance: ChoreInstance) -> ChoreInstanceResponse:
         assigned_to=instance.assigned_to,
         assigned_by=instance.assigned_by,
         completed_by=instance.completed_by,
-        signoff_by=instance.signoff_by,
         started_at=instance.started_at,
         completed_at=instance.completed_at,
-        signed_off_at=instance.signed_off_at,
-        created_at=instance.created_at.isoformat(),
-        updated_at=instance.updated_at.isoformat(),
+        created_at=instance.created_at.isoformat(timespec="seconds") + "Z",
+        updated_at=instance.updated_at.isoformat(timespec="seconds") + "Z",
+    )
+
+
+def _association_to_response(association: ChoreAssociation) -> AssociationResponse:
+    """Map a domain ChoreAssociation to the API response model.
+
+    Args:
+        association: Domain entity.
+
+    Returns:
+        Pydantic response model.
+    """
+    return AssociationResponse(
+        id=association.id,
+        master_chore_id=association.master_chore_id,
+        member_id=association.member_id,
+        is_open_pool=association.is_open_pool,
+        created_by=association.created_by,
+        created_at=association.created_at.isoformat(timespec="seconds") + "Z",
+        updated_at=association.updated_at.isoformat(timespec="seconds") + "Z",
+        removed_at=(
+            association.removed_at.isoformat(timespec="seconds") + "Z"
+            if association.removed_at
+            else None
+        ),
     )
 
 
@@ -132,7 +165,7 @@ def _instance_to_response(instance: ChoreInstance) -> ChoreInstanceResponse:
 async def get_all_chores(
     chores_service: ChoresServiceDep,
 ) -> ChoresResponse:
-    """Get all chores data (categories, tags, masters, instances).
+    """Get all chores data (categories, tags, masters, associations, instances).
 
     Args:
         chores_service: Injected chores service.
@@ -148,6 +181,7 @@ async def get_all_chores(
         categories=[_category_to_response(c) for c in data["categories"]],
         tags=[_tag_to_response(t) for t in data["tags"]],
         master_chores=[_master_to_response(m, category_map) for m in data["master_chores"]],
+        associations=[_association_to_response(a) for a in data["associations"]],
         instances=[_instance_to_response(i) for i in data["instances"]],
     )
 
@@ -166,28 +200,26 @@ async def create_master_chore(
     Returns:
         The newly created master chore.
     """
-    # Determine if creator is adult (faiyaz/trisha are adults)
-    adult_members = {"faiyaz", "trisha"}
-    is_adult = body.created_by in adult_members
-
     chore = MasterChore(
         id=str(uuid4()),
         name=body.name,
         category_id=body.category_id,
         difficulty=body.difficulty,
-        frequency=Frequency(body.frequency),
+        recurrence_rule=body.recurrence_rule,
         estimated_minutes=body.estimated_minutes,
         due_time=body.due_time,
         due_date=body.due_date,
         expiration_behavior=ExpirationBehavior(body.expiration_behavior),
+        end_date=body.end_date,
+        max_occurrences=body.max_occurrences,
+        conditions=body.conditions,
+        is_collaborative=body.is_collaborative,
         created_by=body.created_by,
     )
 
     created = await chores_service.create_master_chore(
         chore=chore,
         tag_ids=body.tag_ids,
-        is_adult_creator=is_adult,
-        approver_id=body.approved_by,
     )
 
     # Build category map for response
@@ -223,8 +255,8 @@ async def update_master_chore(
         updates["category_id"] = body.category_id
     if body.difficulty is not None:
         updates["difficulty"] = body.difficulty
-    if body.frequency is not None:
-        updates["frequency"] = Frequency(body.frequency)
+    if body.recurrence_rule is not None:
+        updates["recurrence_rule"] = body.recurrence_rule
     if body.estimated_minutes is not None:
         updates["estimated_minutes"] = body.estimated_minutes
     if body.due_time is not None:
@@ -233,6 +265,16 @@ async def update_master_chore(
         updates["due_date"] = body.due_date
     if body.expiration_behavior is not None:
         updates["expiration_behavior"] = ExpirationBehavior(body.expiration_behavior)
+    if body.end_date is not None:
+        updates["end_date"] = body.end_date
+    if body.max_occurrences is not None:
+        updates["max_occurrences"] = body.max_occurrences
+    if body.conditions is not None:
+        updates["conditions"] = body.conditions
+    if body.is_collaborative is not None:
+        updates["is_collaborative"] = body.is_collaborative
+    if body.status is not None:
+        updates["status"] = MasterChoreStatus(body.status)
     if body.tag_ids is not None:
         updates["tag_ids"] = body.tag_ids
 
@@ -261,37 +303,44 @@ async def delete_master_chore(
     await chores_service.delete_master_chore(chore_id)
 
 
-@router.post("/masters/{chore_id}/approve", response_model=MasterChoreResponse)
-async def approve_master_chore(
-    chore_id: str,
-    body: ApproveMasterChoreRequest,
+@router.post("/associations", response_model=AssociationResponse, status_code=201)
+async def create_association(
+    body: CreateAssociationRequest,
     chores_service: ChoresServiceDep,
-) -> MasterChoreResponse:
-    """Approve a pending master chore.
+) -> AssociationResponse:
+    """Create a new association between a master chore and a member/pool.
 
     Args:
-        chore_id: Master chore identifier.
-        body: Approval request with approver ID.
+        body: Association creation request.
         chores_service: Injected chores service.
 
     Returns:
-        The approved master chore.
-
-    Raises:
-        HTTPException 400: Master chore not pending approval.
-        HTTPException 404: Master chore not found.
+        The newly created association.
     """
-    try:
-        approved = await chores_service.approve_master_chore(chore_id, body.approver_id)
-    except ValueError as exc:
-        if "not found" in str(exc):
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    association = ChoreAssociation(
+        id=str(uuid4()),
+        master_chore_id=body.master_chore_id,
+        member_id=body.member_id,
+        is_open_pool=body.is_open_pool,
+        created_by=body.created_by,
+    )
 
-    categories = await chores_service.get_categories()
-    category_map = {cat.id: cat for cat in categories}
+    created = await chores_service.create_association(association)
+    return _association_to_response(created)
 
-    return _master_to_response(approved, category_map)
+
+@router.delete("/associations/{association_id}", status_code=204)
+async def delete_association(
+    association_id: str,
+    chores_service: ChoresServiceDep,
+) -> None:
+    """Soft-delete an association.
+
+    Args:
+        association_id: Association identifier.
+        chores_service: Injected chores service.
+    """
+    await chores_service.delete_association(association_id)
 
 
 @router.post("/instances/{instance_id}/claim", response_model=ChoreInstanceResponse)
@@ -375,38 +424,7 @@ async def update_instance_status(
             instance_id,
             new_status,
             body.actor_id,
-            is_adult=body.is_adult,
         )
-    except ValueError as exc:
-        if "not found" in str(exc):
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    return _instance_to_response(updated)
-
-
-@router.post("/instances/{instance_id}/signoff", response_model=ChoreInstanceResponse)
-async def signoff_instance(
-    instance_id: str,
-    body: SignoffInstanceRequest,
-    chores_service: ChoresServiceDep,
-) -> ChoreInstanceResponse:
-    """Sign off on a kid-completed chore instance.
-
-    Args:
-        instance_id: Instance identifier.
-        body: Signoff request with parent member ID.
-        chores_service: Injected chores service.
-
-    Returns:
-        The updated instance.
-
-    Raises:
-        HTTPException 400: Instance not pending signoff.
-        HTTPException 404: Instance not found.
-    """
-    try:
-        updated = await chores_service.signoff_instance(instance_id, body.signoff_member_id)
     except ValueError as exc:
         if "not found" in str(exc):
             raise HTTPException(status_code=404, detail=str(exc)) from exc
