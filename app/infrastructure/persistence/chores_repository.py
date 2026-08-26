@@ -512,6 +512,63 @@ class ChoresRepositoryImpl:
         db_instance = result.scalar_one_or_none()
         return self._instance_to_domain(db_instance) if db_instance else None
 
+    async def get_expired_instances(self, today: date) -> list[ChoreInstance]:
+        """Retrieve instances past their period_end with non-completed status.
+
+        Args:
+            today: Current date to compare against period_end.
+
+        Returns:
+            List of domain ChoreInstance entities that are expired.
+        """
+        statement = (
+            select(ChoreInstanceDB)
+            .where(
+                ChoreInstanceDB.period_end < today,
+                ChoreInstanceDB.status.in_([
+                    InstanceStatus.ACTIVE.value,
+                    InstanceStatus.IN_PROGRESS.value,
+                    InstanceStatus.OVERDUE.value,
+                ]),
+            )
+        )
+        result = await self.session.execute(statement)
+        db_instances = result.scalars().all()
+        return [self._instance_to_domain(db_inst) for db_inst in db_instances]
+
+    async def get_overdue_instances(self, today: date, current_time: str) -> list[ChoreInstance]:
+        """Retrieve instances past their due time but within their period.
+
+        Overdue detection requires joining with master_chores to check due_time.
+        An instance is overdue if:
+        - It's within its period (period_end >= today)
+        - Its master's due_time has passed
+        - Status is ACTIVE or IN_PROGRESS
+
+        Args:
+            today: Current date.
+            current_time: Current time in HH:MM format.
+
+        Returns:
+            List of domain ChoreInstance entities that are overdue.
+        """
+        statement = (
+            select(ChoreInstanceDB)
+            .join(MasterChoreDB, ChoreInstanceDB.master_chore_id == MasterChoreDB.id)
+            .where(
+                ChoreInstanceDB.period_end >= today,
+                ChoreInstanceDB.status.in_([
+                    InstanceStatus.ACTIVE.value,
+                    InstanceStatus.IN_PROGRESS.value,
+                ]),
+                MasterChoreDB.due_time.is_not(None),
+                MasterChoreDB.due_time < current_time,
+            )
+        )
+        result = await self.session.execute(statement)
+        db_instances = result.scalars().all()
+        return [self._instance_to_domain(db_inst) for db_inst in db_instances]
+
     # ── Private helpers ─────────────────────────────────────────
 
     async def _get_tags_for_master(self, master_chore_id: str) -> list[ChoreTag]:

@@ -14,6 +14,7 @@ from app.domain.chores.models import (
     ChoreCategory,
     ChoreInstance,
     ChoreTag,
+    ExpirationBehavior,
     InstanceStatus,
     MasterChore,
     MasterChoreStatus,
@@ -585,9 +586,14 @@ class ChoresService:
         association with an active master, checks if an instance exists for
         the current period and generates one if missing.
 
+        Also processes expired instances and marks overdue instances.
+
         Returns:
             List of newly created instances (empty if all were up to date).
         """
+        await self.process_expired_instances()
+        await self.mark_overdue_instances()
+
         generated: list[ChoreInstance] = []
 
         associations = await self.repository.list_associations()
@@ -613,3 +619,138 @@ class ChoresService:
             logger.info("ensure_current_instances", count=len(generated))
 
         return generated
+
+    async def process_expired_instances(self) -> list[ChoreInstance]:
+        """Process instances past their period_end with non-completed status.
+
+        Applies the master's expiration_behavior to each expired instance:
+        - DISAPPEAR: Delete the instance
+        - CARRY_OVER: Mark as MISSED, generate new instance for next period
+        - STAY_VISIBLE: Mark as MISSED, leave instance visible
+        - CONVERT_TO_OPEN: Clear assignment, move to open pool
+
+        Returns:
+            List of processed ChoreInstance entities.
+        """
+        today = datetime.now(UTC).date()
+        expired = await self.repository.get_expired_instances(today)
+
+        if not expired:
+            return []
+
+        processed: list[ChoreInstance] = []
+        masters_cache: dict[str, MasterChore | None] = {}
+
+        for instance in expired:
+            master_id = instance.master_chore_id
+            if master_id not in masters_cache:
+                masters_cache[master_id] = await self.repository.get_master_chore_by_id(master_id)
+
+            master = masters_cache[master_id]
+            if not master:
+                continue
+
+            behavior = master.expiration_behavior
+
+            if behavior == ExpirationBehavior.DISAPPEAR:
+                await self.repository.delete_instance(instance.id)
+                logger.info(
+                    "process_expired_disappear",
+                    instance_id=instance.id,
+                    master_id=master_id,
+                )
+
+            elif behavior == ExpirationBehavior.CARRY_OVER:
+                await self.repository.update_instance(
+                    instance.id,
+                    {
+                        "status": InstanceStatus.MISSED,
+                        "updated_at": datetime.now(UTC),
+                    },
+                )
+                if instance.association_id:
+                    await self.generate_instance_for_association(instance.association_id, master)
+                logger.info(
+                    "process_expired_carry_over",
+                    instance_id=instance.id,
+                    master_id=master_id,
+                )
+
+            elif behavior == ExpirationBehavior.STAY_VISIBLE:
+                await self.repository.update_instance(
+                    instance.id,
+                    {
+                        "status": InstanceStatus.MISSED,
+                        "updated_at": datetime.now(UTC),
+                    },
+                )
+                logger.info(
+                    "process_expired_stay_visible",
+                    instance_id=instance.id,
+                    master_id=master_id,
+                )
+
+            elif behavior == ExpirationBehavior.CONVERT_TO_OPEN:
+                await self.repository.update_instance(
+                    instance.id,
+                    {
+                        "claimed_by": None,
+                        "assigned_to": None,
+                        "assigned_by": None,
+                        "updated_at": datetime.now(UTC),
+                    },
+                )
+                logger.info(
+                    "process_expired_convert_to_open",
+                    instance_id=instance.id,
+                    master_id=master_id,
+                )
+
+            processed.append(instance)
+
+        if processed:
+            logger.info("process_expired_instances", count=len(processed))
+
+        return processed
+
+    async def mark_overdue_instances(self) -> list[ChoreInstance]:
+        """Mark instances as OVERDUE if their due_time has passed.
+
+        An instance is overdue if:
+        - It's within its period (period_end >= today)
+        - Its master's due_time has passed
+        - Status is ACTIVE or IN_PROGRESS
+
+        Returns:
+            List of newly marked overdue ChoreInstance entities.
+        """
+        now = datetime.now(UTC)
+        today = now.date()
+        current_time = now.strftime("%H:%M")
+
+        overdue = await self.repository.get_overdue_instances(today, current_time)
+
+        if not overdue:
+            return []
+
+        marked: list[ChoreInstance] = []
+
+        for instance in overdue:
+            await self.repository.update_instance(
+                instance.id,
+                {
+                    "status": InstanceStatus.OVERDUE,
+                    "updated_at": datetime.now(UTC),
+                },
+            )
+            marked.append(instance)
+            logger.info(
+                "mark_overdue",
+                instance_id=instance.id,
+                master_id=instance.master_chore_id,
+            )
+
+        if marked:
+            logger.info("mark_overdue_instances", count=len(marked))
+
+        return marked

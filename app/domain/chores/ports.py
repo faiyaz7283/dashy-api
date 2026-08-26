@@ -283,3 +283,33 @@ class ChoresRepository(Protocol):
             ChoreInstance if found, None otherwise.
         """
         ...
+
+    async def get_expired_instances(self, today: date) -> list[ChoreInstance]:
+        """Retrieve instances past their period_end with non-completed status.
+
+        Used for expiration processing to apply expiration_behavior.
+
+        Args:
+            today: Current date to compare against period_end.
+
+        Returns:
+            List of ChoreInstance entities that are expired (period_end < today)
+            and have status ACTIVE, IN_PROGRESS, or OVERDUE.
+        """
+        ...
+
+    async def get_overdue_instances(self, today: date, current_time: str) -> list[ChoreInstance]:
+        """Retrieve instances past their due time but within their period.
+
+        Used for overdue detection to mark instances as OVERDUE.
+
+        Args:
+            today: Current date.
+            current_time: Current time in HH:MM format.
+
+        Returns:
+            List of ChoreInstance entities that are overdue (due_time passed)
+            but still within their period (period_end >= today) and have
+            status ACTIVE or IN_PROGRESS.
+        """
+        ...

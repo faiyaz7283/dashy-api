@@ -631,3 +631,45 @@ class MockChoresRepository:
             ):
                 return instance
         return None
+
+    async def get_expired_instances(self, today: date) -> list[ChoreInstance]:
+        """Return instances past their period_end with non-completed status.
+
+        Args:
+            today: Current date to compare against period_end.
+
+        Returns:
+            List of expired ChoreInstance entities.
+        """
+        return [
+            instance
+            for instance in self._instances
+            if instance.period_end is not None
+            and instance.period_end < today
+            and instance.status
+            in (InstanceStatus.ACTIVE, InstanceStatus.IN_PROGRESS, InstanceStatus.OVERDUE)
+        ]
+
+    async def get_overdue_instances(self, today: date, current_time: str) -> list[ChoreInstance]:
+        """Return instances past their due time but within their period.
+
+        Args:
+            today: Current date.
+            current_time: Current time in HH:MM format.
+
+        Returns:
+            List of overdue ChoreInstance entities.
+        """
+        overdue = []
+        for instance in self._instances:
+            if instance.status not in (InstanceStatus.ACTIVE, InstanceStatus.IN_PROGRESS):
+                continue
+            if instance.period_end is None or instance.period_end < today:
+                continue
+
+            master = next(
+                (m for m in self._masters if m.id == instance.master_chore_id), None
+            )
+            if master and master.due_time and master.due_time < current_time:
+                overdue.append(instance)
+        return overdue
