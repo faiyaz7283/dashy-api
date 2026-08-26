@@ -1010,7 +1010,7 @@ class AssociationResponse(BaseModel):
 | **3** | Instance generation — generate on associate, generate on complete, safety net on board load | Phase 2 | ✅ Complete |
 | **4** | Expiration/rollover — period boundaries, expiration_behavior processing, overdue detection | Phase 3 | ✅ Complete |
 | **5** | Conditional chores — conditions JSON, evaluator, integration with safety net | Phase 3 | ✅ Complete |
-| **6** | Bulk operations — bulk pause/resume masters | Phase 1 | Pending |
+| **6** | Bulk operations — bulk pause/resume masters | Phase 1 | ✅ Complete |
 | **7** | Permission cleanup — remove all approval/age/adult code | Phase 1 | ✅ Complete (done in Phase 1) |
 | **8** | API model updates — new response fields, request fields, remove approval models | Phase 1 | ✅ Complete (done in Phase 1) |
 | **9** | Tests — unit, integration, API for all new logic | Phases 2-7 | Pending |
@@ -1028,6 +1028,8 @@ class AssociationResponse(BaseModel):
 **Phase 4 commit:** `ba07639` (dashy-api) — Expiration behavior processing (DISAPPEAR/CARRY_OVER/STAY_VISIBLE/CONVERT_TO_OPEN), overdue detection, safety net integration, 7 expiration/overdue tests, fixed all alembic lint errors.
 
 **Phase 5 commit:** `2f31b72` (dashy-api) — ConditionEvaluator for weather/calendar conditions, AND/OR logic, integration with instance generation, DI wiring, 16 evaluator tests + 3 conditional generation tests.
+
+**Phase 6 commit:** `ea70b0b` (dashy-api) — Bulk master status updates, POST /api/chores/masters/bulk-status endpoint, SQLModel bulk update, 6 unit tests.
 
 ---
 
