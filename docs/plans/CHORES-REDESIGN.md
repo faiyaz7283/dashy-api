@@ -1007,7 +1007,7 @@ class AssociationResponse(BaseModel):
 | **1** | Model changes — add fields to MasterChore, create `chore_associations` table, add `association_id` to ChoreInstance, remove approval fields, new migration | Nothing | ✅ Complete |
 | **1.5** | Date/time standardization — proper `date`/`datetime` types for all chores fields, `datetime.now(UTC)` throughout | Phase 1 | ✅ Complete |
 | **2** | Association logic — collaborative enforcement, archive-on-disassociate cascade, validation rules, enhanced error handling | Phase 1.5 | ✅ Complete |
-| **3** | Instance generation — generate on associate, generate on complete, safety net on board load | Phase 2 | Pending |
+| **3** | Instance generation — generate on associate, generate on complete, safety net on board load | Phase 2 | ✅ Complete |
 | **4** | Expiration/rollover — period boundaries, expiration_behavior processing, overdue detection | Phase 3 | Pending |
 | **5** | Conditional chores — conditions JSON, evaluator, integration with safety net | Phase 3 | Pending |
 | **6** | Bulk operations — bulk pause/resume masters | Phase 1 | Pending |
@@ -1022,6 +1022,8 @@ class AssociationResponse(BaseModel):
 **Phase 1.5 commit:** `271bda6` (dashy-api) — TEXT→Date/DateTime type enforcement, `datetime.UTC` alias, documentation-only migration.
 
 **Phase 2 commit:** `6c93863` (dashy-api) — `AssociationConflictError`, `_validate_association()`, collaborative enforcement rules, archive-on-disassociate cascade, enhanced error handling (404/409), 11 new unit tests + 6 new API tests.
+
+**Phase 3 commit:** `4adcf8c` (dashy-api) — Period calculation utilities, instance generation engine, safety net on board load, 21 period tests + 8 generation tests + 2 safety net tests + 1 completion trigger test.
 
 ---
 
