@@ -710,3 +710,24 @@ class MockChoresRepository:
             if master and master.due_time and master.due_time < current_time:
                 overdue.append(instance)
         return overdue
+
+    async def bulk_update_master_status(
+        self, master_ids: list[str], status: MasterChoreStatus
+    ) -> int:
+        """Update the status of multiple master chores at once.
+
+        Args:
+            master_ids: List of master chore IDs to update.
+            status: New status to apply.
+
+        Returns:
+            Number of masters actually updated.
+        """
+        updated = 0
+        now = datetime.now(UTC)
+        for master in self._masters:
+            if master.id in master_ids:
+                master.status = status
+                master.updated_at = now
+                updated += 1
+        return updated

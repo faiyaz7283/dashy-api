@@ -772,3 +772,38 @@ class ChoresService:
             logger.info("mark_overdue_instances", count=len(marked))
 
         return marked
+
+    # ── Bulk Operations ───────────────────────────────────────
+
+    async def bulk_update_master_status(
+        self,
+        master_ids: list[str],
+        status: MasterChoreStatus,
+    ) -> int:
+        """Update the status of multiple master chores at once.
+
+        Used for bulk pause/resume operations. Updates status and
+        updated_at timestamp for all specified masters.
+
+        Args:
+            master_ids: List of master chore IDs to update.
+            status: New status to apply.
+
+        Returns:
+            Number of masters actually updated.
+        """
+        if not master_ids:
+            return 0
+
+        updated_count = await self.repository.bulk_update_master_status(
+            master_ids, status
+        )
+
+        logger.info(
+            "bulk_update_master_status",
+            count=updated_count,
+            status=status.value,
+            master_ids=master_ids,
+        )
+
+        return updated_count

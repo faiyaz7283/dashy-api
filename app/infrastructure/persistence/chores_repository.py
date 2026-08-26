@@ -228,6 +228,33 @@ class ChoresRepositoryImpl:
             self.session.add(db_master)
             await self.session.commit()
 
+    async def bulk_update_master_status(
+        self, master_ids: list[str], status: MasterChoreStatus
+    ) -> int:
+        """Update the status of multiple master chores at once.
+
+        Args:
+            master_ids: List of master chore IDs to update.
+            status: New status to apply.
+
+        Returns:
+            Number of masters actually updated.
+        """
+        if not master_ids:
+            return 0
+
+        from sqlmodel import update
+
+        now = datetime.now(UTC)
+        stmt = (
+            update(MasterChoreDB)
+            .where(MasterChoreDB.id.in_(master_ids))
+            .values(status=status.value, updated_at=now)
+        )
+        result = await self.session.execute(stmt)
+        await self.session.commit()
+        return result.rowcount
+
     # ── Instances ───────────────────────────────────────────────
 
     async def get_instances(self, master_chore_id: str | None = None) -> list[ChoreInstance]:

@@ -296,6 +296,38 @@ async def delete_master_chore(
     await chores_service.delete_master_chore(chore_id)
 
 
+@router.post("/masters/bulk-status")
+async def bulk_update_master_status(
+    master_ids: list[str],
+    status: str,
+    chores_service: ChoresServiceDep,
+) -> dict:
+    """Bulk update the status of multiple master chores.
+
+    Args:
+        master_ids: List of master chore IDs to update.
+        status: New status to apply (active, inactive, archived).
+        chores_service: Injected chores service dependency.
+
+    Returns:
+        Dict with updated count.
+
+    Raises:
+        HTTPException: If status is invalid.
+    """
+    try:
+        status_enum = MasterChoreStatus(status)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status: {status}. Must be one of: active, inactive, archived",
+        ) from e
+
+    updated_count = await chores_service.bulk_update_master_status(master_ids, status_enum)
+
+    return {"updated_count": updated_count}
+
+
 @router.post("/associations", response_model=AssociationResponse, status_code=201)
 async def create_association(
     body: CreateAssociationRequest,

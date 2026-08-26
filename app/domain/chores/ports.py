@@ -12,6 +12,7 @@ from app.domain.chores.models import (
     ChoreInstance,
     ChoreTag,
     MasterChore,
+    MasterChoreStatus,
 )
 
 
@@ -311,5 +312,21 @@ class ChoresRepository(Protocol):
             List of ChoreInstance entities that are overdue (due_time passed)
             but still within their period (period_end >= today) and have
             status ACTIVE or IN_PROGRESS.
+        """
+        ...
+
+    async def bulk_update_master_status(
+        self, master_ids: list[str], status: "MasterChoreStatus"
+    ) -> int:
+        """Update the status of multiple master chores at once.
+
+        Used for bulk pause/resume operations.
+
+        Args:
+            master_ids: List of master chore IDs to update.
+            status: New status to apply.
+
+        Returns:
+            Number of masters actually updated.
         """
         ...
