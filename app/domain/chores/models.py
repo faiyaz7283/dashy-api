@@ -5,7 +5,7 @@ master chore templates, chore instances, associations, categories, and tags.
 """
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 
 
@@ -170,9 +170,9 @@ class MasterChore:
     recurrence_rule: dict | None = None
     estimated_minutes: int | None = None
     due_time: str | None = None
-    due_date: str | None = None
+    due_date: date | None = None
     expiration_behavior: ExpirationBehavior = ExpirationBehavior.DISAPPEAR
-    end_date: str | None = None
+    end_date: date | None = None
     max_occurrences: int | None = None
     occurrence_count: int = 0
     conditions: dict | None = None
@@ -232,15 +232,15 @@ class ChoreInstance:
     id: str
     master_chore_id: str
     association_id: str | None = None
-    period_start: str | None = None
-    period_end: str | None = None
+    period_start: date | None = None
+    period_end: date | None = None
     status: InstanceStatus = InstanceStatus.ACTIVE
     claimed_by: str | None = None
     assigned_to: str | None = None
     assigned_by: str | None = None
     completed_by: str | None = None
-    started_at: str | None = None
-    completed_at: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 

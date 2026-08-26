@@ -99,13 +99,9 @@ def _master_to_response(
         is_collaborative=master.is_collaborative,
         created_by=master.created_by,
         status=master.status.value,
-        created_at=master.created_at.isoformat(timespec="seconds") + "Z",
-        updated_at=master.updated_at.isoformat(timespec="seconds") + "Z",
-        deleted_at=(
-            master.deleted_at.isoformat(timespec="seconds") + "Z"
-            if master.deleted_at
-            else None
-        ),
+        created_at=master.created_at,
+        updated_at=master.updated_at,
+        deleted_at=master.deleted_at,
     )
 
 
@@ -131,8 +127,8 @@ def _instance_to_response(instance: ChoreInstance) -> ChoreInstanceResponse:
         completed_by=instance.completed_by,
         started_at=instance.started_at,
         completed_at=instance.completed_at,
-        created_at=instance.created_at.isoformat(timespec="seconds") + "Z",
-        updated_at=instance.updated_at.isoformat(timespec="seconds") + "Z",
+        created_at=instance.created_at,
+        updated_at=instance.updated_at,
     )
 
 
@@ -151,13 +147,9 @@ def _association_to_response(association: ChoreAssociation) -> AssociationRespon
         member_id=association.member_id,
         is_open_pool=association.is_open_pool,
         created_by=association.created_by,
-        created_at=association.created_at.isoformat(timespec="seconds") + "Z",
-        updated_at=association.updated_at.isoformat(timespec="seconds") + "Z",
-        removed_at=(
-            association.removed_at.isoformat(timespec="seconds") + "Z"
-            if association.removed_at
-            else None
-        ),
+        created_at=association.created_at,
+        updated_at=association.updated_at,
+        removed_at=association.removed_at,
     )
 
 

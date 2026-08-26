@@ -62,9 +62,9 @@ class MasterChoreDB(SQLModel, table=True):
     recurrence_rule: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     estimated_minutes: int | None = None
     due_time: str | None = None
-    due_date: str | None = None
+    due_date: date | None = None
     expiration_behavior: str = Field(default="disappear")
-    end_date: str | None = None
+    end_date: date | None = None
     max_occurrences: int | None = None
     occurrence_count: int = Field(default=0)
     conditions: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
@@ -84,15 +84,15 @@ class ChoreInstanceDB(SQLModel, table=True):
     id: str = Field(primary_key=True)
     master_chore_id: str = Field(foreign_key="master_chores.id")
     association_id: str | None = Field(default=None, foreign_key="chore_associations.id")
-    period_start: str | None = None
-    period_end: str | None = None
+    period_start: date | None = None
+    period_end: date | None = None
     status: str = Field(default="active")
     claimed_by: str | None = None
     assigned_to: str | None = None
     assigned_by: str | None = None
     completed_by: str | None = None
-    started_at: str | None = None
-    completed_at: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

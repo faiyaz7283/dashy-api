@@ -41,30 +41,6 @@ _NOW = datetime.now(UTC)
 _TODAY = _NOW.date()
 
 
-def _iso(dt: datetime) -> str:
-    """Format a datetime as ISO string.
-
-    Args:
-        dt: Datetime to format.
-
-    Returns:
-        ISO 8601 string.
-    """
-    return dt.isoformat()
-
-
-def _date_str(d) -> str:
-    """Format a date as ISO string.
-
-    Args:
-        d: Date to format.
-
-    Returns:
-        ISO 8601 date string.
-    """
-    return d.isoformat()
-
-
 # Master chores
 _MASTER_1 = MasterChore(
     id="master-001",
@@ -209,8 +185,8 @@ _INSTANCES = [
         id="inst-001",
         master_chore_id="master-001",
         association_id="assoc-001",
-        period_start=_date_str(_TODAY),
-        period_end=_date_str(_TODAY),
+        period_start=_TODAY,
+        period_end=_TODAY,
         status=InstanceStatus.ACTIVE,
         created_at=_NOW - timedelta(hours=6),
         updated_at=_NOW - timedelta(hours=6),
@@ -219,8 +195,8 @@ _INSTANCES = [
         id="inst-002",
         master_chore_id="master-003",
         association_id="assoc-002",
-        period_start=_date_str(_TODAY - timedelta(days=_TODAY.weekday())),
-        period_end=_date_str(_TODAY - timedelta(days=_TODAY.weekday()) + timedelta(days=6)),
+        period_start=_TODAY - timedelta(days=_TODAY.weekday()),
+        period_end=_TODAY - timedelta(days=_TODAY.weekday()) + timedelta(days=6),
         status=InstanceStatus.ACTIVE,
         created_at=_NOW - timedelta(days=1),
         updated_at=_NOW - timedelta(days=1),
@@ -230,11 +206,11 @@ _INSTANCES = [
         id="inst-003",
         master_chore_id="master-002",
         association_id="assoc-003",
-        period_start=_date_str(_TODAY),
-        period_end=_date_str(_TODAY),
+        period_start=_TODAY,
+        period_end=_TODAY,
         status=InstanceStatus.IN_PROGRESS,
         claimed_by="arya",
-        started_at=_iso(_NOW - timedelta(hours=2)),
+        started_at=_NOW - timedelta(hours=2),
         created_at=_NOW - timedelta(hours=8),
         updated_at=_NOW - timedelta(hours=2),
     ),
@@ -243,8 +219,8 @@ _INSTANCES = [
         id="inst-004",
         master_chore_id="master-004",
         association_id="assoc-004",
-        period_start=_date_str(_TODAY - timedelta(days=_TODAY.weekday())),
-        period_end=_date_str(_TODAY - timedelta(days=_TODAY.weekday()) + timedelta(days=6)),
+        period_start=_TODAY - timedelta(days=_TODAY.weekday()),
+        period_end=_TODAY - timedelta(days=_TODAY.weekday()) + timedelta(days=6),
         status=InstanceStatus.ACTIVE,
         assigned_to="raya",
         assigned_by="trisha",
@@ -256,12 +232,12 @@ _INSTANCES = [
         id="inst-005",
         master_chore_id="master-006",
         association_id="assoc-005",
-        period_start=_date_str(_TODAY - timedelta(days=1)),
-        period_end=_date_str(_TODAY - timedelta(days=1)),
+        period_start=_TODAY - timedelta(days=1),
+        period_end=_TODAY - timedelta(days=1),
         status=InstanceStatus.COMPLETED,
         claimed_by="arya",
         completed_by="arya",
-        completed_at=_iso(_NOW - timedelta(hours=12)),
+        completed_at=_NOW - timedelta(hours=12),
         created_at=_NOW - timedelta(days=1),
         updated_at=_NOW - timedelta(hours=12),
     ),
@@ -270,12 +246,12 @@ _INSTANCES = [
         id="inst-006",
         master_chore_id="master-001",
         association_id="assoc-001",
-        period_start=_date_str(_TODAY - timedelta(days=1)),
-        period_end=_date_str(_TODAY - timedelta(days=1)),
+        period_start=_TODAY - timedelta(days=1),
+        period_end=_TODAY - timedelta(days=1),
         status=InstanceStatus.COMPLETED,
         claimed_by="faiyaz",
         completed_by="faiyaz",
-        completed_at=_iso(_NOW - timedelta(hours=20)),
+        completed_at=_NOW - timedelta(hours=20),
         created_at=_NOW - timedelta(days=1),
         updated_at=_NOW - timedelta(hours=20),
     ),
@@ -284,12 +260,12 @@ _INSTANCES = [
         id="inst-007",
         master_chore_id="master-002",
         association_id="assoc-003",
-        period_start=_date_str(_TODAY - timedelta(days=1)),
-        period_end=_date_str(_TODAY - timedelta(days=1)),
+        period_start=_TODAY - timedelta(days=1),
+        period_end=_TODAY - timedelta(days=1),
         status=InstanceStatus.IN_PROGRESS,
         assigned_to="raya",
         assigned_by="faiyaz",
-        started_at=_iso(_NOW - timedelta(hours=1)),
+        started_at=_NOW - timedelta(hours=1),
         created_at=_NOW - timedelta(days=1),
         updated_at=_NOW - timedelta(hours=1),
     ),

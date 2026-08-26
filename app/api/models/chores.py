@@ -3,6 +3,8 @@
 Pydantic models for chores API requests and responses.
 """
 
+from datetime import date, datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -64,18 +66,18 @@ class MasterChoreResponse(BaseModel):
     recurrence_rule: dict | None = None
     estimated_minutes: int | None = None
     due_time: str | None = None
-    due_date: str | None = None
+    due_date: date | None = None
     expiration_behavior: str
-    end_date: str | None = None
+    end_date: date | None = None
     max_occurrences: int | None = None
     occurrence_count: int = 0
     conditions: dict | None = None
     is_collaborative: bool = False
     created_by: str
     status: str
-    created_at: str
-    updated_at: str
-    deleted_at: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    deleted_at: datetime | None = None
 
 
 class ChoreInstanceResponse(BaseModel):
@@ -101,17 +103,17 @@ class ChoreInstanceResponse(BaseModel):
     id: str
     master_chore_id: str
     association_id: str | None = None
-    period_start: str | None = None
-    period_end: str | None = None
+    period_start: date | None = None
+    period_end: date | None = None
     status: str
     claimed_by: str | None = None
     assigned_to: str | None = None
     assigned_by: str | None = None
     completed_by: str | None = None
-    started_at: str | None = None
-    completed_at: str | None = None
-    created_at: str
-    updated_at: str
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
 
 
 class AssociationResponse(BaseModel):
@@ -133,9 +135,9 @@ class AssociationResponse(BaseModel):
     member_id: str | None = None
     is_open_pool: bool = False
     created_by: str
-    created_at: str
-    updated_at: str
-    removed_at: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    removed_at: datetime | None = None
 
 
 class ChoresResponse(BaseModel):
@@ -183,9 +185,9 @@ class CreateMasterChoreRequest(BaseModel):
     recurrence_rule: dict | None = None
     estimated_minutes: int | None = None
     due_time: str | None = None
-    due_date: str | None = None
+    due_date: date | None = None
     expiration_behavior: str = Field(default="disappear")
-    end_date: str | None = None
+    end_date: date | None = None
     max_occurrences: int | None = None
     conditions: dict | None = None
     is_collaborative: bool = False
@@ -221,9 +223,9 @@ class UpdateMasterChoreRequest(BaseModel):
     recurrence_rule: dict | None = None
     estimated_minutes: int | None = None
     due_time: str | None = None
-    due_date: str | None = None
+    due_date: date | None = None
     expiration_behavior: str | None = None
-    end_date: str | None = None
+    end_date: date | None = None
     max_occurrences: int | None = None
     conditions: dict | None = None
     is_collaborative: bool | None = None
