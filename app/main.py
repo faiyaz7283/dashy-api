@@ -5,14 +5,16 @@ Kept minimal — all cross-cutting concerns live in ``app.core``.
 """
 
 from contextlib import asynccontextmanager
+from time import perf_counter
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.routes import calendar, chores, family, weather
 from app.config import settings
 from app.core.cache import close_cache, get_cache
+from app.core.database import check_connection
 from app.core.exceptions import DashyError
 from app.core.logging import _configure_structlog, get_logger
 from app.core.seed import seed_family_members_if_empty
@@ -105,6 +107,32 @@ async def health_check() -> dict:
             "errors": stats.errors,
         },
     }
+
+
+@app.get("/health/db")
+async def database_health_check() -> dict:
+    """Return database connection health status.
+
+    Returns:
+        Dict with status and latency if healthy, 503 if unhealthy.
+    """
+    start = perf_counter()
+    is_healthy = await check_connection()
+    latency_ms = round((perf_counter() - start) * 1000, 2)
+
+    if is_healthy:
+        return {
+            "status": "healthy",
+            "latency_ms": latency_ms,
+        }
+    else:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "unhealthy",
+                "latency_ms": latency_ms,
+            },
+        )
 
 
 @app.get("/")

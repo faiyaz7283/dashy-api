@@ -6,7 +6,9 @@ collaborative enforcement, and instance generation.
 """
 
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID
+
+from uuid6 import uuid7
 
 from app.core.logging import get_logger
 from app.domain.chores.condition_evaluator import ConditionEvaluator
@@ -145,7 +147,7 @@ class ChoresService:
     async def create_master_chore(
         self,
         chore: MasterChore,
-        tag_ids: list[str],
+        tag_ids: list[UUID],
     ) -> MasterChore:
         """Create a new master chore.
 
@@ -169,7 +171,7 @@ class ChoresService:
         return await self.repository.create_master_chore(chore, tag_ids)
 
     async def update_master_chore(
-        self, chore_id: str, updates: dict, tag_ids: list[str] | None = None
+        self, chore_id: UUID, updates: dict, tag_ids: list[UUID] | None = None
     ) -> MasterChore:
         """Update a master chore.
 
@@ -184,7 +186,7 @@ class ChoresService:
         updates["updated_at"] = datetime.now(UTC)
         return await self.repository.update_master_chore(chore_id, updates)
 
-    async def delete_master_chore(self, chore_id: str) -> None:
+    async def delete_master_chore(self, chore_id: UUID) -> None:
         """Soft-delete (archive) a master chore.
 
         Sets the deleted_at timestamp to mark the chore as archived.
@@ -195,7 +197,7 @@ class ChoresService:
         logger.info("delete_master_chore", chore_id=chore_id)
         await self.repository.delete_master_chore(chore_id)
 
-    async def get_instances(self, master_chore_id: str | None = None) -> list[ChoreInstance]:
+    async def get_instances(self, master_chore_id: UUID | None = None) -> list[ChoreInstance]:
         """Retrieve chore instances.
 
         Args:
@@ -206,7 +208,7 @@ class ChoresService:
         """
         return await self.repository.get_instances(master_chore_id=master_chore_id)
 
-    async def claim_instance(self, instance_id: str, member_id: str) -> ChoreInstance:
+    async def claim_instance(self, instance_id: UUID, member_id: str) -> ChoreInstance:
         """Claim a chore instance for a member.
 
         Setting claimed_by clears assigned_to and assigned_by
@@ -241,7 +243,7 @@ class ChoresService:
 
     async def assign_instance(
         self,
-        instance_id: str,
+        instance_id: UUID,
         assignee_id: str,
         assigner_id: str,
     ) -> ChoreInstance:
@@ -281,7 +283,7 @@ class ChoresService:
 
     async def update_instance_status(
         self,
-        instance_id: str,
+        instance_id: UUID,
         new_status: InstanceStatus,
         actor_id: str,
     ) -> ChoreInstance:
@@ -338,7 +340,7 @@ class ChoresService:
 
     async def get_associations(
         self,
-        master_chore_id: str | None = None,
+        master_chore_id: UUID | None = None,
         member_id: str | None = None,
     ) -> list[ChoreAssociation]:
         """Retrieve chore associations with optional filters.
@@ -396,7 +398,7 @@ class ChoresService:
 
         return created
 
-    async def delete_association(self, association_id: str) -> int:
+    async def delete_association(self, association_id: UUID) -> int:
         """Soft-delete an association and archive its active instances.
 
         Archives all ACTIVE/IN_PROGRESS instances linked to this association
@@ -488,7 +490,7 @@ class ChoresService:
 
     async def generate_instance_for_association(
         self,
-        association_id: str,
+        association_id: UUID,
         master: MasterChore | None = None,
     ) -> ChoreInstance | None:
         """Generate the next instance for an association.
@@ -570,7 +572,7 @@ class ChoresService:
             return None
 
         instance = ChoreInstance(
-            id=str(uuid4()),
+            id=uuid7(),
             master_chore_id=master.id,
             association_id=association_id,
             period_start=period_start,
@@ -615,7 +617,7 @@ class ChoresService:
         generated: list[ChoreInstance] = []
 
         associations = await self.repository.list_associations()
-        masters_cache: dict[str, MasterChore | None] = {}
+        masters_cache: dict[UUID, MasterChore | None] = {}
 
         for association in associations:
             master_id = association.master_chore_id
@@ -657,7 +659,7 @@ class ChoresService:
             return []
 
         processed: list[ChoreInstance] = []
-        masters_cache: dict[str, MasterChore | None] = {}
+        masters_cache: dict[UUID, MasterChore | None] = {}
 
         for instance in expired:
             master_id = instance.master_chore_id
@@ -777,7 +779,7 @@ class ChoresService:
 
     async def bulk_update_master_status(
         self,
-        master_ids: list[str],
+        master_ids: list[UUID],
         status: MasterChoreStatus,
     ) -> int:
         """Update the status of multiple master chores at once.

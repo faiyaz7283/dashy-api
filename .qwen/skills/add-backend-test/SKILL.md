@@ -12,7 +12,7 @@ Workflow for adding tests following Dashy's three-tier testing strategy.
 | Tier | Location | Purpose | I/O | Speed |
 |------|----------|---------|-----|-------|
 | **Unit** | `tests/unit/` | Domain logic, pure functions | None | Fast |
-| **Integration** | `tests/integration/` | Real infrastructure (Redis, SQLite) | Real DB/cache | Medium |
+| **Integration** | `tests/integration/` | Real infrastructure (Redis, PostgreSQL) | Real DB/cache | Medium |
 | **API** | `tests/api/` | HTTP endpoints via httpx | Full app stack | Slow |
 
 ## Prerequisites
@@ -23,13 +23,13 @@ Workflow for adding tests following Dashy's three-tier testing strategy.
 
 ## Test isolation
 
-**Tests use a separate `test.db` database** (not the dev `dashy.db`). This is configured in `tests/conftest.py` by setting `DATABASE_URL` **before any imports**, ensuring tests never modify the development database.
+**Tests use a separate PostgreSQL database** (`dashy_test`) configured via `POSTGRES_*` env vars in `.env.test`. The `tests/conftest.py` sets up the test database and handles table cleanup between tests.
 
 The setup order in `conftest.py` is critical:
-1. Set `DATABASE_URL` environment variable to point to `test.db`
-2. Import application modules (which read `DATABASE_URL` at import time)
+1. Load `.env.test` to configure `POSTGRES_*` variables
+2. Import application modules (which read settings at import time)
 3. Create tables and run tests
-4. Clean up `test.db` after tests complete
+4. Clean up tables after tests complete
 
 **Never modify this setup order** — it ensures complete isolation between dev and test databases.
 
@@ -41,7 +41,7 @@ The setup order in `conftest.py` is critical:
 - Fast execution (<100ms per test)
 
 **Integration test** if:
-- Testing repository implementations (real SQLite)
+- Testing repository implementations (real PostgreSQL)
 - Testing cache layer (real Redis)
 - Testing adapter HTTP calls (mocked with pytest-httpx)
 
@@ -92,7 +92,7 @@ from app.domain.family.models import FamilyMember
 
 @pytest.mark.asyncio
 async def test_family_repository_crud():
-    """Test family repository CRUD operations with real SQLite."""
+    """Test family repository CRUD operations with real PostgreSQL."""
     # Arrange
     async_session_factory = get_async_session_factory()
     async with async_session_factory() as session:
@@ -120,7 +120,7 @@ async def test_family_repository_crud():
 
 **Rules:**
 - Use `@pytest.mark.asyncio` for async tests
-- Real infrastructure (SQLite, Redis) — no mocks for the system under test
+- Real infrastructure (PostgreSQL, Redis) — no mocks for the system under test
 - Mock external APIs (OWM, Google) with `pytest-httpx`
 - Clean up test data after test (or use transactions)
 
@@ -228,7 +228,7 @@ make lint-api && make build-api && make test-api
 | Repositories | `AsyncMock()` | Unit tests |
 | Providers | `AsyncMock()` | Unit tests, API tests |
 | Cache | `AsyncMock()` | Unit tests, API tests |
-| Database | Real SQLite | Integration tests |
+| Database | Real PostgreSQL | Integration tests |
 | Redis | Real Redis | Integration tests |
 
 ## Common patterns

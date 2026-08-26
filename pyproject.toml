@@ -15,9 +15,10 @@ dependencies = [
     "structlog>=26.1.0",
     "sqlmodel>=0.0.39",
     "alembic>=1.19.1",
-    "aiosqlite>=0.22.1",
     "redis>=8.1.0",
-    "greenlet>=3.5.5",
+    "asyncpg>=0.31.0",
+    "psycopg[binary]>=3.3.4",
+    "uuid6>=2025.0.1",
 ]
 
 [dependency-groups]

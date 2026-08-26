@@ -1,7 +1,7 @@
 """Chores repository implementation using SQLModel."""
 
 from datetime import UTC, date, datetime
-from uuid import uuid4
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -67,7 +67,6 @@ class ChoresRepositoryImpl:
             The newly created domain ChoreCategory.
         """
         db_category = ChoreCategoryDB(
-            id=str(uuid4()),
             name=name,
         )
         self.session.add(db_category)
@@ -98,7 +97,6 @@ class ChoresRepositoryImpl:
             The newly created domain ChoreTag.
         """
         db_tag = ChoreTagDB(
-            id=str(uuid4()),
             name=name,
         )
         self.session.add(db_tag)
@@ -130,7 +128,7 @@ class ChoresRepositoryImpl:
             masters.append(self._master_to_domain(db_master, tags))
         return masters
 
-    async def get_master_chore_by_id(self, chore_id: str) -> MasterChore | None:
+    async def get_master_chore_by_id(self, chore_id: UUID) -> MasterChore | None:
         """Retrieve a single master chore by ID.
 
         Args:
@@ -147,7 +145,7 @@ class ChoresRepositoryImpl:
         tags = await self._get_tags_for_master(chore_id)
         return self._master_to_domain(db_master, tags)
 
-    async def create_master_chore(self, chore: MasterChore, tag_ids: list[str]) -> MasterChore:
+    async def create_master_chore(self, chore: MasterChore, tag_ids: list[UUID]) -> MasterChore:
         """Create a new master chore with tag associations.
 
         Args:
@@ -172,7 +170,7 @@ class ChoresRepositoryImpl:
         tags = await self._get_tags_for_master(chore.id)
         return self._master_to_domain(db_master, tags)
 
-    async def update_master_chore(self, chore_id: str, updates: dict) -> MasterChore:
+    async def update_master_chore(self, chore_id: UUID, updates: dict) -> MasterChore:
         """Update a master chore with the given fields.
 
         Args:
@@ -213,7 +211,7 @@ class ChoresRepositoryImpl:
         tags = await self._get_tags_for_master(chore_id)
         return self._master_to_domain(db_master, tags)
 
-    async def delete_master_chore(self, chore_id: str) -> None:
+    async def delete_master_chore(self, chore_id: UUID) -> None:
         """Soft-delete a master chore by setting deleted_at.
 
         Args:
@@ -229,7 +227,7 @@ class ChoresRepositoryImpl:
             await self.session.commit()
 
     async def bulk_update_master_status(
-        self, master_ids: list[str], status: MasterChoreStatus
+        self, master_ids: list[UUID], status: MasterChoreStatus
     ) -> int:
         """Update the status of multiple master chores at once.
 
@@ -257,7 +255,7 @@ class ChoresRepositoryImpl:
 
     # ── Instances ───────────────────────────────────────────────
 
-    async def get_instances(self, master_chore_id: str | None = None) -> list[ChoreInstance]:
+    async def get_instances(self, master_chore_id: UUID | None = None) -> list[ChoreInstance]:
         """Retrieve chore instances from database.
 
         Args:
@@ -274,7 +272,7 @@ class ChoresRepositoryImpl:
         db_instances = result.scalars().all()
         return [self._instance_to_domain(db_inst) for db_inst in db_instances]
 
-    async def get_instance_by_id(self, instance_id: str) -> ChoreInstance | None:
+    async def get_instance_by_id(self, instance_id: UUID) -> ChoreInstance | None:
         """Retrieve a single chore instance by ID.
 
         Args:
@@ -303,7 +301,7 @@ class ChoresRepositoryImpl:
         await self.session.refresh(db_instance)
         return self._instance_to_domain(db_instance)
 
-    async def update_instance(self, instance_id: str, updates: dict) -> ChoreInstance:
+    async def update_instance(self, instance_id: UUID, updates: dict) -> ChoreInstance:
         """Update a chore instance with the given fields.
 
         Args:
@@ -334,7 +332,7 @@ class ChoresRepositoryImpl:
         await self.session.refresh(db_instance)
         return self._instance_to_domain(db_instance)
 
-    async def delete_instance(self, instance_id: str) -> None:
+    async def delete_instance(self, instance_id: UUID) -> None:
         """Delete a chore instance permanently.
 
         Args:
@@ -349,7 +347,7 @@ class ChoresRepositoryImpl:
 
     # ── Associations ───────────────────────────────────────────
 
-    async def get_association(self, association_id: str) -> ChoreAssociation | None:
+    async def get_association(self, association_id: UUID) -> ChoreAssociation | None:
         """Retrieve a single chore association by ID.
 
         Args:
@@ -378,7 +376,7 @@ class ChoresRepositoryImpl:
         await self.session.refresh(db_association)
         return self._association_to_domain(db_association)
 
-    async def delete_association(self, association_id: str) -> None:
+    async def delete_association(self, association_id: UUID) -> None:
         """Soft-delete a chore association by setting removed_at.
 
         Args:
@@ -394,7 +392,7 @@ class ChoresRepositoryImpl:
 
     async def list_associations(
         self,
-        master_chore_id: str | None = None,
+        master_chore_id: UUID | None = None,
         member_id: str | None = None,
         include_removed: bool = False,
     ) -> list[ChoreAssociation]:
@@ -420,7 +418,7 @@ class ChoresRepositoryImpl:
         db_associations = result.scalars().all()
         return [self._association_to_domain(db_assoc) for db_assoc in db_associations]
 
-    async def get_associations_by_master(self, master_chore_id: str) -> list[ChoreAssociation]:
+    async def get_associations_by_master(self, master_chore_id: UUID) -> list[ChoreAssociation]:
         """Retrieve all active associations for a master chore.
 
         Args:
@@ -443,7 +441,7 @@ class ChoresRepositoryImpl:
         return await self.list_associations(member_id=member_id)
 
     async def get_instances_by_association(
-        self, association_id: str, active_only: bool = True
+        self, association_id: UUID, active_only: bool = True
     ) -> list[ChoreInstance]:
         """Retrieve instances linked to a specific association.
 
@@ -469,7 +467,7 @@ class ChoresRepositoryImpl:
         db_instances = result.scalars().all()
         return [self._instance_to_domain(db_inst) for db_inst in db_instances]
 
-    async def archive_instances_by_association(self, association_id: str) -> int:
+    async def archive_instances_by_association(self, association_id: UUID) -> int:
         """Archive all active instances for an association.
 
         Sets status to ARCHIVED for instances that are ACTIVE or IN_PROGRESS.
@@ -502,7 +500,7 @@ class ChoresRepositoryImpl:
 
     async def get_instance_for_period(
         self,
-        association_id: str,
+        association_id: UUID,
         period_start: date,
         period_end: date,
     ) -> ChoreInstance | None:
@@ -590,7 +588,7 @@ class ChoresRepositoryImpl:
 
     # ── Private helpers ─────────────────────────────────────────
 
-    async def _get_tags_for_master(self, master_chore_id: str) -> list[ChoreTag]:
+    async def _get_tags_for_master(self, master_chore_id: UUID) -> list[ChoreTag]:
         """Fetch tags associated with a master chore via the join table.
 
         Args:
@@ -608,7 +606,7 @@ class ChoresRepositoryImpl:
         db_tags = result.scalars().all()
         return [self._tag_to_domain(db_tag) for db_tag in db_tags]
 
-    async def _replace_tag_links(self, master_chore_id: str, tag_ids: list[str]) -> None:
+    async def _replace_tag_links(self, master_chore_id: UUID, tag_ids: list[UUID]) -> None:
         """Replace all tag associations for a master chore.
 
         Args:

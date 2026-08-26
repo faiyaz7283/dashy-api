@@ -1,14 +1,16 @@
-"""Integration tests for ChoresRepositoryImpl against real SQLite.
+"""Integration tests for ChoresRepositoryImpl against real PostgreSQL.
 
 Tests the SQLModel persistence layer — domain↔DB mapping, queries,
 bulk operations, and soft-delete behavior.
 """
 
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import SQLModel
+from uuid6 import uuid7
 
 from app.core.database import get_async_session_factory
 from app.domain.chores.models import (
@@ -62,7 +64,7 @@ def repo(session: AsyncSession) -> ChoresRepositoryImpl:
     return ChoresRepositoryImpl(session)
 
 
-async def _seed_category(repo: ChoresRepositoryImpl) -> str:
+async def _seed_category(repo: ChoresRepositoryImpl) -> UUID:
     """Seed a category and return its ID.
 
     Args:
@@ -75,7 +77,7 @@ async def _seed_category(repo: ChoresRepositoryImpl) -> str:
     return cat.id
 
 
-async def _seed_tag(repo: ChoresRepositoryImpl) -> str:
+async def _seed_tag(repo: ChoresRepositoryImpl) -> UUID:
     """Seed a tag and return its ID.
 
     Args:
@@ -90,8 +92,8 @@ async def _seed_tag(repo: ChoresRepositoryImpl) -> str:
 
 async def _seed_master(
     repo: ChoresRepositoryImpl,
-    category_id: str,
-    master_id: str = "master-int-001",
+    category_id: UUID,
+    master_id: UUID | None = None,
     **overrides,
 ) -> MasterChore:
     """Seed a master chore and return it.
@@ -99,14 +101,14 @@ async def _seed_master(
     Args:
         repo: Repository instance.
         category_id: Category FK.
-        master_id: Master chore ID.
+        master_id: Master chore ID (auto-generated if not provided).
         **overrides: Fields to override on the default master.
 
     Returns:
         Created MasterChore domain entity.
     """
     defaults = {
-        "id": master_id,
+        "id": master_id or uuid7(),
         "name": "Integration Test Chore",
         "category_id": category_id,
         "created_by": "tester",
@@ -162,7 +164,7 @@ class TestMasterChorePersistence:
         tag2 = await repo.create_tag("Physical")
 
         master = MasterChore(
-            id="master-tags-001",
+            id=uuid7(),
             name="Tagged Chore",
             category_id=cat_id,
             created_by="tester",
@@ -176,16 +178,17 @@ class TestMasterChorePersistence:
     async def test_get_master_by_id(self, repo: ChoresRepositoryImpl) -> None:
         """Test fetching a single master by ID."""
         cat_id = await _seed_category(repo)
-        await _seed_master(repo, cat_id, master_id="master-fetch-001")
+        master_id = uuid7()
+        await _seed_master(repo, cat_id, master_id=master_id)
 
-        fetched = await repo.get_master_chore_by_id("master-fetch-001")
+        fetched = await repo.get_master_chore_by_id(master_id)
         assert fetched is not None
         assert fetched.name == "Integration Test Chore"
         assert fetched.category_id == cat_id
 
     async def test_get_master_by_id_not_found(self, repo: ChoresRepositoryImpl) -> None:
         """Test fetching non-existent master returns None."""
-        result = await repo.get_master_chore_by_id("nonexistent")
+        result = await repo.get_master_chore_by_id(uuid7())
         assert result is None
 
     async def test_soft_delete_excludes_from_default_list(
@@ -193,9 +196,10 @@ class TestMasterChorePersistence:
     ) -> None:
         """Test that soft-deleted masters are excluded from default listing."""
         cat_id = await _seed_category(repo)
-        await _seed_master(repo, cat_id, master_id="master-del-001")
+        master_id = uuid7()
+        await _seed_master(repo, cat_id, master_id=master_id)
 
-        await repo.delete_master_chore("master-del-001")
+        await repo.delete_master_chore(master_id)
 
         masters = await repo.get_master_chores()
         assert len(masters) == 0
@@ -205,9 +209,10 @@ class TestMasterChorePersistence:
     ) -> None:
         """Test that soft-deleted masters appear with include_archived=True."""
         cat_id = await _seed_category(repo)
-        await _seed_master(repo, cat_id, master_id="master-del-002")
+        master_id = uuid7()
+        await _seed_master(repo, cat_id, master_id=master_id)
 
-        await repo.delete_master_chore("master-del-002")
+        await repo.delete_master_chore(master_id)
 
         masters = await repo.get_master_chores(include_archived=True)
         assert len(masters) == 1
@@ -217,10 +222,11 @@ class TestMasterChorePersistence:
     async def test_update_master_chore(self, repo: ChoresRepositoryImpl) -> None:
         """Test updating master chore fields."""
         cat_id = await _seed_category(repo)
-        await _seed_master(repo, cat_id, master_id="master-upd-001")
+        master_id = uuid7()
+        await _seed_master(repo, cat_id, master_id=master_id)
 
         updated = await repo.update_master_chore(
-            "master-upd-001",
+            master_id,
             {"name": "Updated Name", "difficulty": 4},
         )
 
@@ -234,15 +240,15 @@ class TestMasterChorePersistence:
         tag2 = await repo.create_tag("New Tag")
 
         master = MasterChore(
-            id="master-tagupd-001",
+            id=uuid7(),
             name="Tag Replace Test",
             category_id=cat_id,
             created_by="tester",
         )
-        await repo.create_master_chore(master, tag_ids=[tag1_id])
+        created = await repo.create_master_chore(master, tag_ids=[tag1_id])
 
         updated = await repo.update_master_chore(
-            "master-tagupd-001",
+            created.id,
             {"tag_ids": [tag2.id]},
         )
 
@@ -252,7 +258,7 @@ class TestMasterChorePersistence:
     async def test_update_nonexistent_raises(self, repo: ChoresRepositoryImpl) -> None:
         """Test that updating a non-existent master raises ValueError."""
         with pytest.raises(ValueError, match="not found"):
-            await repo.update_master_chore("nonexistent", {"name": "X"})
+            await repo.update_master_chore(uuid7(), {"name": "X"})
 
 
 class TestBulkUpdatePersistence:
@@ -261,28 +267,29 @@ class TestBulkUpdatePersistence:
     async def test_bulk_update_status(self, repo: ChoresRepositoryImpl) -> None:
         """Test bulk status update hits the database correctly."""
         cat_id = await _seed_category(repo)
-        await _seed_master(repo, cat_id, master_id="bulk-001")
-        await _seed_master(repo, cat_id, master_id="bulk-002")
-        await _seed_master(repo, cat_id, master_id="bulk-003")
+        ids = [uuid7() for _ in range(3)]
+        for mid in ids:
+            await _seed_master(repo, cat_id, master_id=mid)
 
         updated_count = await repo.bulk_update_master_status(
-            ["bulk-001", "bulk-002", "bulk-003"],
+            ids,
             MasterChoreStatus.INACTIVE,
         )
 
         assert updated_count == 3
 
-        for mid in ["bulk-001", "bulk-002", "bulk-003"]:
+        for mid in ids:
             master = await repo.get_master_chore_by_id(mid)
             assert master.status == MasterChoreStatus.INACTIVE
 
     async def test_bulk_update_partial_ids(self, repo: ChoresRepositoryImpl) -> None:
         """Test bulk update with some non-existent IDs only updates existing."""
         cat_id = await _seed_category(repo)
-        await _seed_master(repo, cat_id, master_id="bulk-partial-001")
+        real_id = uuid7()
+        await _seed_master(repo, cat_id, master_id=real_id)
 
         updated_count = await repo.bulk_update_master_status(
-            ["bulk-partial-001", "nonexistent"],
+            [real_id, uuid7()],
             MasterChoreStatus.ARCHIVED,
         )
 
@@ -302,19 +309,21 @@ class TestInstancePersistence:
     async def test_create_and_fetch_instance(self, repo: ChoresRepositoryImpl) -> None:
         """Test creating an instance and reading it back."""
         cat_id = await _seed_category(repo)
-        await _seed_master(repo, cat_id, master_id="master-inst-001")
+        master_id = uuid7()
+        await _seed_master(repo, cat_id, master_id=master_id)
 
         today = datetime.now(UTC).date()
+        instance_id = uuid7()
         instance = ChoreInstance(
-            id="inst-int-001",
-            master_chore_id="master-inst-001",
+            id=instance_id,
+            master_chore_id=master_id,
             period_start=today,
             period_end=today,
             status=InstanceStatus.ACTIVE,
         )
         created = await repo.create_instance(instance)
 
-        fetched = await repo.get_instance_by_id("inst-int-001")
+        fetched = await repo.get_instance_by_id(instance_id)
         assert fetched is not None
         assert fetched.id == created.id
         assert fetched.status == InstanceStatus.ACTIVE
@@ -325,18 +334,16 @@ class TestInstancePersistence:
     ) -> None:
         """Test filtering instances by master_chore_id."""
         cat_id = await _seed_category(repo)
-        await _seed_master(repo, cat_id, master_id="master-filter-001")
-        await _seed_master(repo, cat_id, master_id="master-filter-002")
+        mid1 = uuid7()
+        mid2 = uuid7()
+        await _seed_master(repo, cat_id, master_id=mid1)
+        await _seed_master(repo, cat_id, master_id=mid2)
 
         today = datetime.now(UTC).date()
-        for inst_id, mid in [
-            ("inst-f-1", "master-filter-001"),
-            ("inst-f-2", "master-filter-001"),
-            ("inst-f-3", "master-filter-002"),
-        ]:
+        for mid in [mid1, mid1, mid2]:
             await repo.create_instance(
                 ChoreInstance(
-                    id=inst_id,
+                    id=uuid7(),
                     master_chore_id=mid,
                     period_start=today,
                     period_end=today,
@@ -344,19 +351,21 @@ class TestInstancePersistence:
                 )
             )
 
-        instances = await repo.get_instances(master_chore_id="master-filter-001")
+        instances = await repo.get_instances(master_chore_id=mid1)
         assert len(instances) == 2
 
     async def test_update_instance_status(self, repo: ChoresRepositoryImpl) -> None:
         """Test updating instance status fields."""
         cat_id = await _seed_category(repo)
-        await _seed_master(repo, cat_id, master_id="master-upd-inst")
+        master_id = uuid7()
+        await _seed_master(repo, cat_id, master_id=master_id)
 
         today = datetime.now(UTC).date()
+        instance_id = uuid7()
         await repo.create_instance(
             ChoreInstance(
-                id="inst-upd-001",
-                master_chore_id="master-upd-inst",
+                id=instance_id,
+                master_chore_id=master_id,
                 period_start=today,
                 period_end=today,
                 status=InstanceStatus.ACTIVE,
@@ -365,7 +374,7 @@ class TestInstancePersistence:
 
         now = datetime.now(UTC)
         updated = await repo.update_instance(
-            "inst-upd-001",
+            instance_id,
             {
                 "status": InstanceStatus.COMPLETED,
                 "completed_by": "tester",
@@ -379,22 +388,24 @@ class TestInstancePersistence:
     async def test_delete_instance_permanently(self, repo: ChoresRepositoryImpl) -> None:
         """Test that delete_instance removes the row from DB."""
         cat_id = await _seed_category(repo)
-        await _seed_master(repo, cat_id, master_id="master-del-inst")
+        master_id = uuid7()
+        await _seed_master(repo, cat_id, master_id=master_id)
 
         today = datetime.now(UTC).date()
+        instance_id = uuid7()
         await repo.create_instance(
             ChoreInstance(
-                id="inst-del-001",
-                master_chore_id="master-del-inst",
+                id=instance_id,
+                master_chore_id=master_id,
                 period_start=today,
                 period_end=today,
                 status=InstanceStatus.ACTIVE,
             )
         )
 
-        await repo.delete_instance("inst-del-001")
+        await repo.delete_instance(instance_id)
 
-        result = await repo.get_instance_by_id("inst-del-001")
+        result = await repo.get_instance_by_id(instance_id)
         assert result is None
 
 
@@ -404,17 +415,19 @@ class TestAssociationPersistence:
     async def test_create_and_fetch_association(self, repo: ChoresRepositoryImpl) -> None:
         """Test creating an association and reading it back."""
         cat_id = await _seed_category(repo)
-        await _seed_master(repo, cat_id, master_id="master-assoc-001")
+        master_id = uuid7()
+        await _seed_master(repo, cat_id, master_id=master_id)
 
+        assoc_id = uuid7()
         association = ChoreAssociation(
-            id="assoc-int-001",
-            master_chore_id="master-assoc-001",
+            id=assoc_id,
+            master_chore_id=master_id,
             member_id="tester",
             created_by="tester",
         )
         await repo.create_association(association)
 
-        fetched = await repo.get_association("assoc-int-001")
+        fetched = await repo.get_association(assoc_id)
         assert fetched is not None
         assert fetched.member_id == "tester"
         assert fetched.removed_at is None
@@ -422,52 +435,57 @@ class TestAssociationPersistence:
     async def test_soft_delete_association(self, repo: ChoresRepositoryImpl) -> None:
         """Test that delete sets removed_at but keeps the row."""
         cat_id = await _seed_category(repo)
-        await _seed_master(repo, cat_id, master_id="master-assoc-del")
+        master_id = uuid7()
+        await _seed_master(repo, cat_id, master_id=master_id)
 
+        assoc_id = uuid7()
         await repo.create_association(
             ChoreAssociation(
-                id="assoc-del-001",
-                master_chore_id="master-assoc-del",
+                id=assoc_id,
+                master_chore_id=master_id,
                 member_id="tester",
                 created_by="tester",
             )
         )
 
-        await repo.delete_association("assoc-del-001")
+        await repo.delete_association(assoc_id)
 
         # Still fetchable directly
-        fetched = await repo.get_association("assoc-del-001")
+        fetched = await repo.get_association(assoc_id)
         assert fetched is not None
         assert fetched.removed_at is not None
 
         # Excluded from default list
-        active = await repo.list_associations(master_chore_id="master-assoc-del")
+        active = await repo.list_associations(master_chore_id=master_id)
         assert len(active) == 0
 
         # Included when requested
         all_assocs = await repo.list_associations(
-            master_chore_id="master-assoc-del", include_removed=True
+            master_chore_id=master_id, include_removed=True
         )
         assert len(all_assocs) == 1
 
     async def test_get_associations_by_member(self, repo: ChoresRepositoryImpl) -> None:
         """Test filtering associations by member_id."""
         cat_id = await _seed_category(repo)
-        await _seed_master(repo, cat_id, master_id="master-mem-001")
-        await _seed_master(repo, cat_id, master_id="master-mem-002")
+        mid1 = uuid7()
+        mid2 = uuid7()
+        await _seed_master(repo, cat_id, master_id=mid1)
+        await _seed_master(repo, cat_id, master_id=mid2)
 
+        assoc1_id = uuid7()
         await repo.create_association(
             ChoreAssociation(
-                id="assoc-mem-001",
-                master_chore_id="master-mem-001",
+                id=assoc1_id,
+                master_chore_id=mid1,
                 member_id="arya",
                 created_by="tester",
             )
         )
         await repo.create_association(
             ChoreAssociation(
-                id="assoc-mem-002",
-                master_chore_id="master-mem-002",
+                id=uuid7(),
+                master_chore_id=mid2,
                 member_id="raya",
                 created_by="tester",
             )
@@ -475,7 +493,7 @@ class TestAssociationPersistence:
 
         arya_assocs = await repo.get_associations_by_member("arya")
         assert len(arya_assocs) == 1
-        assert arya_assocs[0].id == "assoc-mem-001"
+        assert arya_assocs[0].id == assoc1_id
 
 
 class TestInstanceQueryHelpers:
@@ -484,32 +502,35 @@ class TestInstanceQueryHelpers:
     async def test_get_instance_for_period(self, repo: ChoresRepositoryImpl) -> None:
         """Test finding an instance by association + period dates."""
         cat_id = await _seed_category(repo)
-        await _seed_master(repo, cat_id, master_id="master-period-001")
+        master_id = uuid7()
+        await _seed_master(repo, cat_id, master_id=master_id)
 
+        assoc_id = uuid7()
         await repo.create_association(
             ChoreAssociation(
-                id="assoc-period-001",
-                master_chore_id="master-period-001",
+                id=assoc_id,
+                master_chore_id=master_id,
                 member_id="tester",
                 created_by="tester",
             )
         )
 
         today = datetime.now(UTC).date()
+        instance_id = uuid7()
         await repo.create_instance(
             ChoreInstance(
-                id="inst-period-001",
-                master_chore_id="master-period-001",
-                association_id="assoc-period-001",
+                id=instance_id,
+                master_chore_id=master_id,
+                association_id=assoc_id,
                 period_start=today,
                 period_end=today,
                 status=InstanceStatus.ACTIVE,
             )
         )
 
-        found = await repo.get_instance_for_period("assoc-period-001", today, today)
+        found = await repo.get_instance_for_period(assoc_id, today, today)
         assert found is not None
-        assert found.id == "inst-period-001"
+        assert found.id == instance_id
 
     async def test_get_instance_for_period_not_found(
         self, repo: ChoresRepositoryImpl
@@ -518,21 +539,24 @@ class TestInstanceQueryHelpers:
         today = datetime.now(UTC).date()
         tomorrow = today + timedelta(days=1)
 
-        found = await repo.get_instance_for_period("assoc-none", today, tomorrow)
+        found = await repo.get_instance_for_period(uuid7(), today, tomorrow)
         assert found is None
 
     async def test_get_expired_instances(self, repo: ChoresRepositoryImpl) -> None:
         """Test fetching instances past their period_end."""
         cat_id = await _seed_category(repo)
-        await _seed_master(repo, cat_id, master_id="master-exp-001")
+        master_id = uuid7()
+        await _seed_master(repo, cat_id, master_id=master_id)
 
         yesterday = datetime.now(UTC).date() - timedelta(days=1)
         today = datetime.now(UTC).date()
 
+        exp1_id = uuid7()
+        exp2_id = uuid7()
         await repo.create_instance(
             ChoreInstance(
-                id="inst-exp-001",
-                master_chore_id="master-exp-001",
+                id=exp1_id,
+                master_chore_id=master_id,
                 period_start=yesterday,
                 period_end=yesterday,
                 status=InstanceStatus.ACTIVE,
@@ -540,8 +564,8 @@ class TestInstanceQueryHelpers:
         )
         await repo.create_instance(
             ChoreInstance(
-                id="inst-exp-002",
-                master_chore_id="master-exp-001",
+                id=exp2_id,
+                master_chore_id=master_id,
                 period_start=today,
                 period_end=today,
                 status=InstanceStatus.ACTIVE,
@@ -550,31 +574,35 @@ class TestInstanceQueryHelpers:
 
         expired = await repo.get_expired_instances(today)
         expired_ids = [i.id for i in expired]
-        assert "inst-exp-001" in expired_ids
-        assert "inst-exp-002" not in expired_ids
+        assert exp1_id in expired_ids
+        assert exp2_id not in expired_ids
 
     async def test_archive_instances_by_association(
         self, repo: ChoresRepositoryImpl
     ) -> None:
         """Test archiving active instances for an association."""
         cat_id = await _seed_category(repo)
-        await _seed_master(repo, cat_id, master_id="master-arch-001")
+        master_id = uuid7()
+        await _seed_master(repo, cat_id, master_id=master_id)
 
+        assoc_id = uuid7()
         await repo.create_association(
             ChoreAssociation(
-                id="assoc-arch-001",
-                master_chore_id="master-arch-001",
+                id=assoc_id,
+                master_chore_id=master_id,
                 member_id="tester",
                 created_by="tester",
             )
         )
 
         today = datetime.now(UTC).date()
+        inst1_id = uuid7()
+        inst2_id = uuid7()
         await repo.create_instance(
             ChoreInstance(
-                id="inst-arch-001",
-                master_chore_id="master-arch-001",
-                association_id="assoc-arch-001",
+                id=inst1_id,
+                master_chore_id=master_id,
+                association_id=assoc_id,
                 period_start=today,
                 period_end=today,
                 status=InstanceStatus.ACTIVE,
@@ -582,38 +610,40 @@ class TestInstanceQueryHelpers:
         )
         await repo.create_instance(
             ChoreInstance(
-                id="inst-arch-002",
-                master_chore_id="master-arch-001",
-                association_id="assoc-arch-001",
+                id=inst2_id,
+                master_chore_id=master_id,
+                association_id=assoc_id,
                 period_start=today,
                 period_end=today,
                 status=InstanceStatus.COMPLETED,
             )
         )
 
-        archived_count = await repo.archive_instances_by_association("assoc-arch-001")
+        archived_count = await repo.archive_instances_by_association(assoc_id)
 
         assert archived_count == 1
-        inst_001 = await repo.get_instance_by_id("inst-arch-001")
+        inst_001 = await repo.get_instance_by_id(inst1_id)
         assert inst_001.status == InstanceStatus.ARCHIVED
-        inst_002 = await repo.get_instance_by_id("inst-arch-002")
+        inst_002 = await repo.get_instance_by_id(inst2_id)
         assert inst_002.status == InstanceStatus.COMPLETED
 
     async def test_get_overdue_instances(self, repo: ChoresRepositoryImpl) -> None:
         """Test fetching instances past their due_time."""
         cat_id = await _seed_category(repo)
+        master_id = uuid7()
         await _seed_master(
             repo,
             cat_id,
-            master_id="master-overdue-001",
+            master_id=master_id,
             due_time="08:00",
         )
 
         today = datetime.now(UTC).date()
+        overdue_id = uuid7()
         await repo.create_instance(
             ChoreInstance(
-                id="inst-overdue-001",
-                master_chore_id="master-overdue-001",
+                id=overdue_id,
+                master_chore_id=master_id,
                 period_start=today,
                 period_end=today,
                 status=InstanceStatus.ACTIVE,
@@ -623,9 +653,9 @@ class TestInstanceQueryHelpers:
         # Query with time well past 08:00
         overdue = await repo.get_overdue_instances(today, "12:00")
         overdue_ids = [i.id for i in overdue]
-        assert "inst-overdue-001" in overdue_ids
+        assert overdue_id in overdue_ids
 
         # Query with time before 08:00 — should not be overdue
         not_overdue = await repo.get_overdue_instances(today, "07:00")
         not_overdue_ids = [i.id for i in not_overdue]
-        assert "inst-overdue-001" not in not_overdue_ids
+        assert overdue_id not in not_overdue_ids

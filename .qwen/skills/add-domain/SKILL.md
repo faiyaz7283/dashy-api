@@ -457,7 +457,7 @@ Following this skill to add a shopping lists domain:
 
 1. `app/domain/lists/` — models (ListItem, ShoppingList), ports (ListProvider, ListRepository), services (ListService)
 2. `app/infrastructure/lists/` — mock_adapter (no external API needed initially)
-3. `app/infrastructure/persistence/list_repository.py` — SQLite-backed repository
+3. `app/infrastructure/persistence/list_repository.py` — PostgreSQL-backed repository
 4. `app/api/models/lists.py` — ListResponse, CreateListRequest
 5. `app/api/routes/lists.py` — GET/POST/PUT/DELETE endpoints
 6. Wire DI container, add config, register routes

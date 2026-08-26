@@ -2,6 +2,10 @@ FROM python:3.13-slim AS build
 
 WORKDIR /app
 
+# PostgreSQL dev headers for compiling psycopg C extension
+RUN apt-get update && apt-get install -y --no-install-recommends libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install UV
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
@@ -17,6 +21,10 @@ COPY . .
 FROM python:3.13-slim
 
 WORKDIR /app
+
+# PostgreSQL shared library for runtime
+RUN apt-get update && apt-get install -y --no-install-recommends libpq5 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy UV and dependencies from build
 COPY --from=build /usr/local/bin/uv /usr/local/bin/uv

@@ -6,7 +6,9 @@ the Haider family members (faiyaz, trisha, arya, raya).
 
 import copy
 from datetime import UTC, date, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID
+
+from uuid6 import uuid7
 
 from app.domain.chores.models import (
     ChoreAssociation,
@@ -19,22 +21,58 @@ from app.domain.chores.models import (
     MasterChoreStatus,
 )
 
+# Generate UUIDs for mock data
+_CAT_KITCHEN = uuid7()
+_CAT_BATHROOM = uuid7()
+_CAT_OUTDOOR = uuid7()
+_CAT_LAUNDRY = uuid7()
+_CAT_GENERAL = uuid7()
+
+_TAG_QUICK = uuid7()
+_TAG_PHYSICAL = uuid7()
+_TAG_MESSY = uuid7()
+_TAG_FOCUS = uuid7()
+_TAG_TEAMWORK = uuid7()
+
+_MASTER_001 = uuid7()
+_MASTER_002 = uuid7()
+_MASTER_003 = uuid7()
+_MASTER_004 = uuid7()
+_MASTER_005 = uuid7()
+_MASTER_006 = uuid7()
+_MASTER_007 = uuid7()
+
+_ASSOC_001 = uuid7()
+_ASSOC_002 = uuid7()
+_ASSOC_003 = uuid7()
+_ASSOC_004 = uuid7()
+_ASSOC_005 = uuid7()
+_ASSOC_006 = uuid7()
+
+_INST_001 = uuid7()
+_INST_002 = uuid7()
+_INST_003 = uuid7()
+_INST_004 = uuid7()
+_INST_005 = uuid7()
+_INST_006 = uuid7()
+_INST_007 = uuid7()
+
 # Preset categories
 _PRESET_CATEGORIES = [
-    ChoreCategory(id="cat-kitchen", name="Kitchen"),
-    ChoreCategory(id="cat-bathroom", name="Bathroom"),
-    ChoreCategory(id="cat-outdoor", name="Outdoor"),
-    ChoreCategory(id="cat-laundry", name="Laundry"),
-    ChoreCategory(id="cat-general", name="General"),
+    ChoreCategory(id=_CAT_KITCHEN, name="Kitchen"),
+    ChoreCategory(id=_CAT_BATHROOM, name="Bathroom"),
+    ChoreCategory(id=_CAT_OUTDOOR, name="Outdoor"),
+    ChoreCategory(id=_CAT_LAUNDRY, name="Laundry"),
+    ChoreCategory(id=_CAT_GENERAL, name="General"),
 ]
 
 # Sample tags
 _SAMPLE_TAGS = [
-    ChoreTag(id="tag-quick", name="Quick"),
-    ChoreTag(id="tag-physical", name="Physical"),
-    ChoreTag(id="tag-messy", name="Messy"),
-    ChoreTag(id="tag-focus", name="Focus"),
-    ChoreTag(id="tag-teamwork", name="Teamwork"),
+    ChoreTag(id=_TAG_QUICK, name="Quick"),
+    ChoreTag(id=_TAG_PHYSICAL, name="Physical"),
+    ChoreTag(id=_TAG_MESSY, name="Messy"),
+    ChoreTag(id=_TAG_FOCUS, name="Focus"),
+    ChoreTag(id=_TAG_TEAMWORK, name="Teamwork"),
 ]
 
 _NOW = datetime.now(UTC)
@@ -43,9 +81,9 @@ _TODAY = _NOW.date()
 
 # Master chores
 _MASTER_1 = MasterChore(
-    id="master-001",
+    id=_MASTER_001,
     name="Wipe Kitchen Counter",
-    category_id="cat-kitchen",
+    category_id=_CAT_KITCHEN,
     tags=[_SAMPLE_TAGS[0]],
     difficulty=1,
     recurrence_rule={"frequency": "daily", "time": "18:00"},
@@ -58,9 +96,9 @@ _MASTER_1 = MasterChore(
 )
 
 _MASTER_2 = MasterChore(
-    id="master-002",
+    id=_MASTER_002,
     name="Clean Bathroom Sink",
-    category_id="cat-bathroom",
+    category_id=_CAT_BATHROOM,
     tags=[_SAMPLE_TAGS[0], _SAMPLE_TAGS[2]],
     difficulty=2,
     recurrence_rule={"frequency": "daily", "time": "20:00"},
@@ -73,9 +111,9 @@ _MASTER_2 = MasterChore(
 )
 
 _MASTER_3 = MasterChore(
-    id="master-003",
+    id=_MASTER_003,
     name="Rake Leaves in Yard",
-    category_id="cat-outdoor",
+    category_id=_CAT_OUTDOOR,
     tags=[_SAMPLE_TAGS[1]],
     difficulty=3,
     recurrence_rule={"frequency": "weekly", "day_of_week": 0, "time": "10:00"},
@@ -88,9 +126,9 @@ _MASTER_3 = MasterChore(
 )
 
 _MASTER_4 = MasterChore(
-    id="master-004",
+    id=_MASTER_004,
     name="Fold Laundry",
-    category_id="cat-laundry",
+    category_id=_CAT_LAUNDRY,
     tags=[_SAMPLE_TAGS[0], _SAMPLE_TAGS[3]],
     difficulty=2,
     recurrence_rule={"frequency": "weekly", "day_of_week": 6, "time": "14:00"},
@@ -103,9 +141,9 @@ _MASTER_4 = MasterChore(
 )
 
 _MASTER_5 = MasterChore(
-    id="master-005",
+    id=_MASTER_005,
     name="Organize Bookshelf",
-    category_id="cat-general",
+    category_id=_CAT_GENERAL,
     tags=[_SAMPLE_TAGS[3]],
     difficulty=2,
     recurrence_rule={"frequency": "monthly", "day_of_month": 15, "time": "11:00"},
@@ -118,9 +156,9 @@ _MASTER_5 = MasterChore(
 )
 
 _MASTER_6 = MasterChore(
-    id="master-006",
+    id=_MASTER_006,
     name="Take Out Trash",
-    category_id="cat-kitchen",
+    category_id=_CAT_KITCHEN,
     tags=[_SAMPLE_TAGS[0]],
     difficulty=1,
     recurrence_rule={"frequency": "daily", "time": "19:00"},
@@ -133,9 +171,9 @@ _MASTER_6 = MasterChore(
 )
 
 _MASTER_7_CONDITIONAL = MasterChore(
-    id="master-007",
+    id=_MASTER_007,
     name="Shovel Snow",
-    category_id="cat-outdoor",
+    category_id=_CAT_OUTDOOR,
     tags=[_SAMPLE_TAGS[1]],
     difficulty=4,
     recurrence_rule={"frequency": "daily", "time": "08:00"},
@@ -166,48 +204,48 @@ _ALL_MASTERS = [
 # Mock associations
 _ASSOCIATIONS = [
     ChoreAssociation(
-        id="assoc-001",
-        master_chore_id="master-001",
+        id=_ASSOC_001,
+        master_chore_id=_MASTER_001,
         member_id="arya",
         created_by="faiyaz",
         created_at=_NOW - timedelta(days=10),
         updated_at=_NOW - timedelta(days=10),
     ),
     ChoreAssociation(
-        id="assoc-002",
-        master_chore_id="master-003",
+        id=_ASSOC_002,
+        master_chore_id=_MASTER_003,
         is_open_pool=True,
         created_by="faiyaz",
         created_at=_NOW - timedelta(days=8),
         updated_at=_NOW - timedelta(days=8),
     ),
     ChoreAssociation(
-        id="assoc-003",
-        master_chore_id="master-002",
+        id=_ASSOC_003,
+        master_chore_id=_MASTER_002,
         member_id="arya",
         created_by="trisha",
         created_at=_NOW - timedelta(days=7),
         updated_at=_NOW - timedelta(days=7),
     ),
     ChoreAssociation(
-        id="assoc-004",
-        master_chore_id="master-004",
+        id=_ASSOC_004,
+        master_chore_id=_MASTER_004,
         member_id="raya",
         created_by="trisha",
         created_at=_NOW - timedelta(days=5),
         updated_at=_NOW - timedelta(days=5),
     ),
     ChoreAssociation(
-        id="assoc-005",
-        master_chore_id="master-006",
+        id=_ASSOC_005,
+        master_chore_id=_MASTER_006,
         member_id="arya",
         created_by="faiyaz",
         created_at=_NOW - timedelta(days=10),
         updated_at=_NOW - timedelta(days=10),
     ),
     ChoreAssociation(
-        id="assoc-006",
-        master_chore_id="master-007",
+        id=_ASSOC_006,
+        master_chore_id=_MASTER_007,
         member_id="arya",
         created_by="faiyaz",
         created_at=_NOW - timedelta(days=5),
@@ -219,9 +257,9 @@ _ASSOCIATIONS = [
 _INSTANCES = [
     # Active — open pool, unclaimed
     ChoreInstance(
-        id="inst-001",
-        master_chore_id="master-001",
-        association_id="assoc-001",
+        id=_INST_001,
+        master_chore_id=_MASTER_001,
+        association_id=_ASSOC_001,
         period_start=_TODAY,
         period_end=_TODAY,
         status=InstanceStatus.ACTIVE,
@@ -229,9 +267,9 @@ _INSTANCES = [
         updated_at=_NOW - timedelta(hours=6),
     ),
     ChoreInstance(
-        id="inst-002",
-        master_chore_id="master-003",
-        association_id="assoc-002",
+        id=_INST_002,
+        master_chore_id=_MASTER_003,
+        association_id=_ASSOC_002,
         period_start=_TODAY - timedelta(days=_TODAY.weekday()),
         period_end=_TODAY - timedelta(days=_TODAY.weekday()) + timedelta(days=6),
         status=InstanceStatus.ACTIVE,
@@ -240,9 +278,9 @@ _INSTANCES = [
     ),
     # Claimed by arya, in progress
     ChoreInstance(
-        id="inst-003",
-        master_chore_id="master-002",
-        association_id="assoc-003",
+        id=_INST_003,
+        master_chore_id=_MASTER_002,
+        association_id=_ASSOC_003,
         period_start=_TODAY,
         period_end=_TODAY,
         status=InstanceStatus.IN_PROGRESS,
@@ -253,9 +291,9 @@ _INSTANCES = [
     ),
     # Assigned to raya
     ChoreInstance(
-        id="inst-004",
-        master_chore_id="master-004",
-        association_id="assoc-004",
+        id=_INST_004,
+        master_chore_id=_MASTER_004,
+        association_id=_ASSOC_004,
         period_start=_TODAY - timedelta(days=_TODAY.weekday()),
         period_end=_TODAY - timedelta(days=_TODAY.weekday()) + timedelta(days=6),
         status=InstanceStatus.ACTIVE,
@@ -266,9 +304,9 @@ _INSTANCES = [
     ),
     # Completed (arya self-completed)
     ChoreInstance(
-        id="inst-005",
-        master_chore_id="master-006",
-        association_id="assoc-005",
+        id=_INST_005,
+        master_chore_id=_MASTER_006,
+        association_id=_ASSOC_005,
         period_start=_TODAY - timedelta(days=1),
         period_end=_TODAY - timedelta(days=1),
         status=InstanceStatus.COMPLETED,
@@ -280,9 +318,9 @@ _INSTANCES = [
     ),
     # Completed (faiyaz self-completed)
     ChoreInstance(
-        id="inst-006",
-        master_chore_id="master-001",
-        association_id="assoc-001",
+        id=_INST_006,
+        master_chore_id=_MASTER_001,
+        association_id=_ASSOC_001,
         period_start=_TODAY - timedelta(days=1),
         period_end=_TODAY - timedelta(days=1),
         status=InstanceStatus.COMPLETED,
@@ -294,9 +332,9 @@ _INSTANCES = [
     ),
     # In progress by raya
     ChoreInstance(
-        id="inst-007",
-        master_chore_id="master-002",
-        association_id="assoc-003",
+        id=_INST_007,
+        master_chore_id=_MASTER_002,
+        association_id=_ASSOC_003,
         period_start=_TODAY - timedelta(days=1),
         period_end=_TODAY - timedelta(days=1),
         status=InstanceStatus.IN_PROGRESS,
@@ -342,7 +380,7 @@ class MockChoresRepository:
             The newly created category.
         """
         category = ChoreCategory(
-            id=f"cat-{uuid4().hex[:8]}",
+            id=uuid7(),
             name=name,
         )
         self._categories.append(category)
@@ -366,7 +404,7 @@ class MockChoresRepository:
             The newly created tag.
         """
         tag = ChoreTag(
-            id=f"tag-{uuid4().hex[:8]}",
+            id=uuid7(),
             name=name,
         )
         self._tags.append(tag)
@@ -385,7 +423,7 @@ class MockChoresRepository:
             return list(self._masters)
         return [m for m in self._masters if m.deleted_at is None]
 
-    async def get_master_chore_by_id(self, chore_id: str) -> MasterChore | None:
+    async def get_master_chore_by_id(self, chore_id: UUID) -> MasterChore | None:
         """Return a mock master chore by ID.
 
         Args:
@@ -399,7 +437,7 @@ class MockChoresRepository:
                 return master
         return None
 
-    async def create_master_chore(self, chore: MasterChore, tag_ids: list[str]) -> MasterChore:
+    async def create_master_chore(self, chore: MasterChore, tag_ids: list[UUID]) -> MasterChore:
         """Create a mock master chore.
 
         Args:
@@ -414,7 +452,7 @@ class MockChoresRepository:
         self._masters.append(chore)
         return chore
 
-    async def update_master_chore(self, chore_id: str, updates: dict) -> MasterChore:
+    async def update_master_chore(self, chore_id: UUID, updates: dict) -> MasterChore:
         """Update a mock master chore.
 
         Args:
@@ -435,7 +473,7 @@ class MockChoresRepository:
                 return master
         raise ValueError(f"Master chore '{chore_id}' not found")
 
-    async def delete_master_chore(self, chore_id: str) -> None:
+    async def delete_master_chore(self, chore_id: UUID) -> None:
         """Soft-delete a mock master chore.
 
         Args:
@@ -447,7 +485,7 @@ class MockChoresRepository:
                 master.status = MasterChoreStatus.ARCHIVED
                 return
 
-    async def get_instances(self, master_chore_id: str | None = None) -> list[ChoreInstance]:
+    async def get_instances(self, master_chore_id: UUID | None = None) -> list[ChoreInstance]:
         """Return mock chore instances.
 
         Args:
@@ -460,7 +498,7 @@ class MockChoresRepository:
             return [i for i in self._instances if i.master_chore_id == master_chore_id]
         return list(self._instances)
 
-    async def get_instance_by_id(self, instance_id: str) -> ChoreInstance | None:
+    async def get_instance_by_id(self, instance_id: UUID) -> ChoreInstance | None:
         """Return a mock chore instance by ID.
 
         Args:
@@ -486,7 +524,7 @@ class MockChoresRepository:
         self._instances.append(instance)
         return instance
 
-    async def update_instance(self, instance_id: str, updates: dict) -> ChoreInstance:
+    async def update_instance(self, instance_id: UUID, updates: dict) -> ChoreInstance:
         """Update a mock chore instance.
 
         Args:
@@ -507,7 +545,7 @@ class MockChoresRepository:
                 return instance
         raise ValueError(f"Instance '{instance_id}' not found")
 
-    async def delete_instance(self, instance_id: str) -> None:
+    async def delete_instance(self, instance_id: UUID) -> None:
         """Delete a mock chore instance.
 
         Args:
@@ -517,7 +555,7 @@ class MockChoresRepository:
 
     # ── Associations ───────────────────────────────────────────
 
-    async def get_association(self, association_id: str) -> ChoreAssociation | None:
+    async def get_association(self, association_id: UUID) -> ChoreAssociation | None:
         """Return a mock chore association by ID.
 
         Args:
@@ -543,7 +581,7 @@ class MockChoresRepository:
         self._associations.append(association)
         return association
 
-    async def delete_association(self, association_id: str) -> None:
+    async def delete_association(self, association_id: UUID) -> None:
         """Soft-delete a mock chore association.
 
         Args:
@@ -556,7 +594,7 @@ class MockChoresRepository:
 
     async def list_associations(
         self,
-        master_chore_id: str | None = None,
+        master_chore_id: UUID | None = None,
         member_id: str | None = None,
         include_removed: bool = False,
     ) -> list[ChoreAssociation]:
@@ -579,7 +617,7 @@ class MockChoresRepository:
             result = [a for a in result if a.member_id == member_id]
         return result
 
-    async def get_associations_by_master(self, master_chore_id: str) -> list[ChoreAssociation]:
+    async def get_associations_by_master(self, master_chore_id: UUID) -> list[ChoreAssociation]:
         """Return all active associations for a master chore.
 
         Args:
@@ -602,7 +640,7 @@ class MockChoresRepository:
         return await self.list_associations(member_id=member_id)
 
     async def get_instances_by_association(
-        self, association_id: str, active_only: bool = True
+        self, association_id: UUID, active_only: bool = True
     ) -> list[ChoreInstance]:
         """Return instances linked to a specific association.
 
@@ -621,7 +659,7 @@ class MockChoresRepository:
             ]
         return instances
 
-    async def archive_instances_by_association(self, association_id: str) -> int:
+    async def archive_instances_by_association(self, association_id: UUID) -> int:
         """Archive all active instances for an association.
 
         Sets status to ARCHIVED for instances that are ACTIVE or IN_PROGRESS.
@@ -645,7 +683,7 @@ class MockChoresRepository:
 
     async def get_instance_for_period(
         self,
-        association_id: str,
+        association_id: UUID,
         period_start: date,
         period_end: date,
     ) -> ChoreInstance | None:
@@ -712,7 +750,7 @@ class MockChoresRepository:
         return overdue
 
     async def bulk_update_master_status(
-        self, master_ids: list[str], status: MasterChoreStatus
+        self, master_ids: list[UUID], status: MasterChoreStatus
     ) -> int:
         """Update the status of multiple master chores at once.
 

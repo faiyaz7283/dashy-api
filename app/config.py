@@ -74,8 +74,28 @@ class Settings(BaseSettings):
     # CORS
     CORS_ORIGINS: str = "https://dashy.local,https://dashy-v2.local,http://localhost:3000,http://dashy.local"
 
-    # Database
-    DATABASE_URL: str = "sqlite+aiosqlite:///./dashy.db"
+    # Database — PostgreSQL connection (all values from environment)
+    POSTGRES_USER: str
+    POSTGRES_PASSWORD: str
+    POSTGRES_DB: str
+    POSTGRES_HOST: str = "postgres"
+    POSTGRES_PORT: int = 5432
+
+    @property
+    def database_url(self) -> str:
+        """Construct async database URL from individual PostgreSQL settings."""
+        return (
+            f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
+
+    @property
+    def sync_database_url(self) -> str:
+        """Construct sync database URL for Alembic migrations."""
+        return (
+            f"postgresql+psycopg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
 
     # Cache
     REDIS_URL: str = "redis://localhost:6379"

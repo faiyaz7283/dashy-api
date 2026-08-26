@@ -4,6 +4,7 @@ Pydantic models for chores API requests and responses.
 """
 
 from datetime import date, datetime
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -16,7 +17,7 @@ class ChoreCategoryResponse(BaseModel):
         name: Display name.
     """
 
-    id: str
+    id: UUID
     name: str
 
 
@@ -28,7 +29,7 @@ class ChoreTagResponse(BaseModel):
         name: Display name.
     """
 
-    id: str
+    id: UUID
     name: str
 
 
@@ -58,7 +59,7 @@ class MasterChoreResponse(BaseModel):
         deleted_at: ISO datetime of soft-delete (None if active).
     """
 
-    id: str
+    id: UUID
     name: str
     category: ChoreCategoryResponse
     tags: list[ChoreTagResponse]
@@ -100,9 +101,9 @@ class ChoreInstanceResponse(BaseModel):
         updated_at: ISO datetime of last update.
     """
 
-    id: str
-    master_chore_id: str
-    association_id: str | None = None
+    id: UUID
+    master_chore_id: UUID
+    association_id: UUID | None = None
     period_start: date | None = None
     period_end: date | None = None
     status: str
@@ -130,8 +131,8 @@ class AssociationResponse(BaseModel):
         removed_at: ISO datetime of soft-delete (None if active).
     """
 
-    id: str
-    master_chore_id: str
+    id: UUID
+    master_chore_id: UUID
     member_id: str | None = None
     is_open_pool: bool = False
     created_by: str
@@ -179,8 +180,8 @@ class CreateMasterChoreRequest(BaseModel):
     """
 
     name: str = Field(min_length=1, max_length=200)
-    category_id: str
-    tag_ids: list[str] = Field(default_factory=list)
+    category_id: UUID
+    tag_ids: list[UUID] = Field(default_factory=list)
     difficulty: int = Field(default=1, ge=1, le=5)
     recurrence_rule: dict | None = None
     estimated_minutes: int | None = None
@@ -217,8 +218,8 @@ class UpdateMasterChoreRequest(BaseModel):
     """
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
-    category_id: str | None = None
-    tag_ids: list[str] | None = None
+    category_id: UUID | None = None
+    tag_ids: list[UUID] | None = None
     difficulty: int | None = Field(default=None, ge=1, le=5)
     recurrence_rule: dict | None = None
     estimated_minutes: int | None = None
@@ -242,7 +243,7 @@ class CreateAssociationRequest(BaseModel):
         created_by: Member ID creating the association.
     """
 
-    master_chore_id: str
+    master_chore_id: UUID
     member_id: str | None = None
     is_open_pool: bool = False
     created_by: str

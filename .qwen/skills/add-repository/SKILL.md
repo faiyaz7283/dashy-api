@@ -122,7 +122,7 @@ Create `app/infrastructure/persistence/<domain>_repository.py`:
 ```python
 """<Domain> repository implementation.
 
-SQLite-backed implementation of <Domain>Repository Protocol.
+PostgreSQL-backed implementation of <Domain>Repository Protocol.
 """
 
 from sqlmodel import select
@@ -137,7 +137,7 @@ logger = get_logger(__name__)
 
 
 class <Domain>RepositoryImpl:
-    """SQLite-backed implementation of <Domain>Repository.
+    """PostgreSQL-backed implementation of <Domain>Repository.
 
     Provides persistent storage for <domain> entities.
     """
@@ -342,7 +342,7 @@ from app.infrastructure.persistence.<domain>_repository import <Domain>Repositor
 
 @pytest.mark.asyncio
 async def test_<domain>_repository_crud():
-    """Test repository CRUD operations with real SQLite."""
+    """Test repository CRUD operations with real PostgreSQL."""
     # Arrange
     async_session_factory = get_async_session_factory()
     async with async_session_factory() as session:
@@ -439,5 +439,5 @@ make lint-api && make build-api && make test-api
 - Use async SQLAlchemy sessions (`AsyncSession`)
 - Convert between DB model and domain entity at repository boundary
 - Log important operations (save, delete)
-- Test with real SQLite database (integration tests)
+- Test with real PostgreSQL database (integration tests)
 - Follow Google-style docstrings

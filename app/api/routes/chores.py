@@ -3,9 +3,10 @@
 RESTful endpoints for the family chore management system.
 """
 
-from uuid import uuid4
+from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
+from uuid6 import uuid7
 
 from app.api.deps import ChoresServiceDep
 from app.api.models.chores import (
@@ -65,7 +66,7 @@ def _tag_to_response(tag: ChoreTag) -> ChoreTagResponse:
 
 def _master_to_response(
     master: MasterChore,
-    category_map: dict[str, ChoreCategory],
+    category_map: dict[UUID, ChoreCategory],
 ) -> MasterChoreResponse:
     """Map a domain MasterChore to the API response model.
 
@@ -194,7 +195,7 @@ async def create_master_chore(
         The newly created master chore.
     """
     chore = MasterChore(
-        id=str(uuid4()),
+        id=uuid7(),
         name=body.name,
         category_id=body.category_id,
         difficulty=body.difficulty,
@@ -224,7 +225,7 @@ async def create_master_chore(
 
 @router.put("/masters/{chore_id}", response_model=MasterChoreResponse)
 async def update_master_chore(
-    chore_id: str,
+    chore_id: UUID,
     body: UpdateMasterChoreRequest,
     chores_service: ChoresServiceDep,
 ) -> MasterChoreResponse:
@@ -284,7 +285,7 @@ async def update_master_chore(
 
 @router.delete("/masters/{chore_id}", status_code=204)
 async def delete_master_chore(
-    chore_id: str,
+    chore_id: UUID,
     chores_service: ChoresServiceDep,
 ) -> None:
     """Soft-delete (archive) a master chore.
@@ -299,7 +300,7 @@ async def delete_master_chore(
 @router.post("/masters/bulk-status")
 async def bulk_update_master_status(
     chores_service: ChoresServiceDep,
-    master_ids: list[str] = Query(default=[]),
+    master_ids: list[UUID] = Query(default=[]),
     status: str = Query(...),
 ) -> dict:
     """Bulk update the status of multiple master chores.
@@ -347,7 +348,7 @@ async def create_association(
         HTTPException 409: Association violates collaborative constraints.
     """
     association = ChoreAssociation(
-        id=str(uuid4()),
+        id=uuid7(),
         master_chore_id=body.master_chore_id,
         member_id=body.member_id,
         is_open_pool=body.is_open_pool,
@@ -366,7 +367,7 @@ async def create_association(
 
 @router.delete("/associations/{association_id}", status_code=204)
 async def delete_association(
-    association_id: str,
+    association_id: UUID,
     chores_service: ChoresServiceDep,
 ) -> None:
     """Soft-delete an association and archive its active instances.
@@ -386,7 +387,7 @@ async def delete_association(
 
 @router.post("/instances/{instance_id}/claim", response_model=ChoreInstanceResponse)
 async def claim_instance(
-    instance_id: str,
+    instance_id: UUID,
     body: ClaimInstanceRequest,
     chores_service: ChoresServiceDep,
 ) -> ChoreInstanceResponse:
@@ -413,7 +414,7 @@ async def claim_instance(
 
 @router.post("/instances/{instance_id}/assign", response_model=ChoreInstanceResponse)
 async def assign_instance(
-    instance_id: str,
+    instance_id: UUID,
     body: AssignInstanceRequest,
     chores_service: ChoresServiceDep,
 ) -> ChoreInstanceResponse:
@@ -442,7 +443,7 @@ async def assign_instance(
 
 @router.put("/instances/{instance_id}/status", response_model=ChoreInstanceResponse)
 async def update_instance_status(
-    instance_id: str,
+    instance_id: UUID,
     body: UpdateInstanceStatusRequest,
     chores_service: ChoresServiceDep,
 ) -> ChoreInstanceResponse:

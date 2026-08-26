@@ -11,7 +11,7 @@ Dashy API provides REST endpoints for weather data, calendar events, family memb
 - **Framework:** FastAPI
 - **Python:** 3.13+
 - **Package Manager:** UV
-- **Database:** SQLite (via SQLModel + Alembic)
+- **Database:** PostgreSQL (via SQLModel + Alembic)
 - **Cache:** Redis
 - **Testing:** pytest + pytest-asyncio + pytest-httpx
 - **Linting:** Ruff
@@ -107,19 +107,20 @@ See `env/.env.dev.example` in the orchestrator repo for required variables:
 - `OPENWEATHERMAP_API_KEY` — Weather API key
 - `OPENWEATHERMAP_LAT`, `OPENWEATHERMAP_LON` — Location coordinates
 - `REDIS_URL` — Redis connection string
-- `DATABASE_URL` — SQLite database path
+- `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` — PostgreSQL connection
+- `POSTGRES_HOST`, `POSTGRES_PORT` — PostgreSQL host/port (defaults: `postgres`, `5432`)
 - `CORS_ORIGINS` — Allowed CORS origins
 - `CHORES_USE_MOCK` — Use mock chore repository (true/false)
 
 ## Database Architecture
 
-**Development:** SQLite database at `/app/data/dashy.db` on Docker volume `api-data` (not git-tracked).
+**Development:** PostgreSQL database via Docker service `postgres:18-alpine`, connection configured via `POSTGRES_*` env vars. Data persists on `postgres-data` volume (not git-tracked).
 
-**Production:** Separate database on Pi's Docker volume, configured via `DATABASE_URL` in production `.env`.
+**Production:** Separate PostgreSQL database on Pi's Docker volume, configured via `POSTGRES_*` env vars in production `.env`.
 
-**Testing:** Isolated `test.db` created by `tests/conftest.py` — tests never modify the dev database.
+**Testing:** Tests use the same PostgreSQL instance but connect to a separate `dashy_test` database configured in `.env.test`.
 
-**Migrations:** Alembic manages schema changes. Migrations run automatically on `make dev-up` via `entrypoint.sh`. Manual migration commands:
+**Migrations:** Alembic manages schema changes with async PostgreSQL support. Migrations run automatically on `make dev-up` via `entrypoint.sh` (which waits for PostgreSQL readiness). Manual migration commands:
 
 ```bash
 make migrate              # Apply pending migrations
@@ -131,7 +132,7 @@ make migrate-create MESSAGE="description"  # Generate new migration
 
 ## Testing
 
-**Test isolation:** Tests use a separate `test.db` database (not the dev `dashy.db`). This is configured in `tests/conftest.py` by setting `DATABASE_URL` before any imports, ensuring tests never modify the development database.
+**Test isolation:** Tests use a separate PostgreSQL database (`dashy_test`) configured via `POSTGRES_*` env vars in `.env.test`. The `tests/conftest.py` sets up the test database and handles table cleanup between tests.
 
 ```bash
 # Run all tests

@@ -1,6 +1,6 @@
 ---
 name: add-db-migration
-description: Workflow for creating and applying Alembic database migrations for Dashy's SQLite database.
+description: Workflow for creating and applying Alembic database migrations for Dashy's PostgreSQL database.
 ---
 
 # Add Database Migration
@@ -11,7 +11,7 @@ Workflow for creating and applying Alembic database migrations.
 
 - SQLModel ORM models exist in `app/infrastructure/persistence/models.py`
 - Alembic is configured (`alembic.ini` + `alembic/` directory exist)
-- Database URL is set in environment (`DATABASE_URL` env var or default `sqlite+aiosqlite:///./dashy.db`)
+- PostgreSQL connection configured via `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` env vars
 
 ## Migration automation
 
@@ -93,6 +93,7 @@ def downgrade() -> None:
 - ✅ Indexes are created for indexed fields
 - ✅ `downgrade()` properly reverses `upgrade()`
 - ✅ No data loss in downgrade (or document if intentional)
+- ✅ PostgreSQL-specific types used correctly (UUID, JSONB, TIMESTAMPTZ)
 
 ### 4. Apply migration
 
@@ -245,15 +246,15 @@ Alembic will generate `op.create_foreign_key()`.
 
 **Migration fails on apply**
 - Check SQL syntax in generated migration
-- Verify column types are SQLite-compatible
+- Verify column types are PostgreSQL-compatible
 - Test migration on a fresh database
 
 ## Database persistence
 
-**Development:** SQLite database at `/app/data/dashy.db` on Docker volume `api-data` (not git-tracked).
+**Development:** PostgreSQL database via Docker service `postgres:18-alpine`, connection configured via `POSTGRES_*` env vars. Data persists on `postgres-data` volume (not git-tracked).
 
-**Production:** Separate database on Pi's Docker volume, configured via `DATABASE_URL` in production `.env`.
+**Production:** Separate PostgreSQL database on Pi's Docker volume, configured via `POSTGRES_*` env vars in production `.env`.
 
-**Testing:** Isolated `test.db` created by `tests/conftest.py` — tests never modify the dev database.
+**Testing:** Tests use the same PostgreSQL instance but connect to a separate `dashy_test` database configured in `.env.test`.
 
-**Important:** Database files are not git-tracked (`.gitignore` excludes `*.db`). Configure `DATABASE_URL` in `.env` appropriately for each environment.
+**Important:** Database data lives on Docker volumes, never in version control.

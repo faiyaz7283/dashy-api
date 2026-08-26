@@ -5,6 +5,7 @@ Defines the contracts for chores data access.
 
 from datetime import date
 from typing import Protocol
+from uuid import UUID
 
 from app.domain.chores.models import (
     ChoreAssociation,
@@ -72,7 +73,7 @@ class ChoresRepository(Protocol):
         """
         ...
 
-    async def get_master_chore_by_id(self, chore_id: str) -> MasterChore | None:
+    async def get_master_chore_by_id(self, chore_id: UUID) -> MasterChore | None:
         """Retrieve a single master chore by ID.
 
         Args:
@@ -83,7 +84,7 @@ class ChoresRepository(Protocol):
         """
         ...
 
-    async def create_master_chore(self, chore: MasterChore, tag_ids: list[str]) -> MasterChore:
+    async def create_master_chore(self, chore: MasterChore, tag_ids: list[UUID]) -> MasterChore:
         """Create a new master chore with tag associations.
 
         Args:
@@ -95,7 +96,7 @@ class ChoresRepository(Protocol):
         """
         ...
 
-    async def update_master_chore(self, chore_id: str, updates: dict) -> MasterChore:
+    async def update_master_chore(self, chore_id: UUID, updates: dict) -> MasterChore:
         """Update a master chore with the given fields.
 
         Args:
@@ -107,7 +108,7 @@ class ChoresRepository(Protocol):
         """
         ...
 
-    async def delete_master_chore(self, chore_id: str) -> None:
+    async def delete_master_chore(self, chore_id: UUID) -> None:
         """Soft-delete a master chore by setting deleted_at.
 
         Args:
@@ -115,7 +116,7 @@ class ChoresRepository(Protocol):
         """
         ...
 
-    async def get_instances(self, master_chore_id: str | None = None) -> list[ChoreInstance]:
+    async def get_instances(self, master_chore_id: UUID | None = None) -> list[ChoreInstance]:
         """Retrieve chore instances, optionally filtered by master chore.
 
         Args:
@@ -126,7 +127,7 @@ class ChoresRepository(Protocol):
         """
         ...
 
-    async def get_instance_by_id(self, instance_id: str) -> ChoreInstance | None:
+    async def get_instance_by_id(self, instance_id: UUID) -> ChoreInstance | None:
         """Retrieve a single chore instance by ID.
 
         Args:
@@ -148,7 +149,7 @@ class ChoresRepository(Protocol):
         """
         ...
 
-    async def update_instance(self, instance_id: str, updates: dict) -> ChoreInstance:
+    async def update_instance(self, instance_id: UUID, updates: dict) -> ChoreInstance:
         """Update a chore instance with the given fields.
 
         Args:
@@ -160,7 +161,7 @@ class ChoresRepository(Protocol):
         """
         ...
 
-    async def delete_instance(self, instance_id: str) -> None:
+    async def delete_instance(self, instance_id: UUID) -> None:
         """Delete a chore instance permanently.
 
         Args:
@@ -168,7 +169,7 @@ class ChoresRepository(Protocol):
         """
         ...
 
-    async def get_association(self, association_id: str) -> ChoreAssociation | None:
+    async def get_association(self, association_id: UUID) -> ChoreAssociation | None:
         """Retrieve a single chore association by ID.
 
         Args:
@@ -190,7 +191,7 @@ class ChoresRepository(Protocol):
         """
         ...
 
-    async def delete_association(self, association_id: str) -> None:
+    async def delete_association(self, association_id: UUID) -> None:
         """Soft-delete a chore association by setting removed_at.
 
         Args:
@@ -200,7 +201,7 @@ class ChoresRepository(Protocol):
 
     async def list_associations(
         self,
-        master_chore_id: str | None = None,
+        master_chore_id: UUID | None = None,
         member_id: str | None = None,
         include_removed: bool = False,
     ) -> list[ChoreAssociation]:
@@ -216,7 +217,7 @@ class ChoresRepository(Protocol):
         """
         ...
 
-    async def get_associations_by_master(self, master_chore_id: str) -> list[ChoreAssociation]:
+    async def get_associations_by_master(self, master_chore_id: UUID) -> list[ChoreAssociation]:
         """Retrieve all active associations for a master chore.
 
         Args:
@@ -239,7 +240,7 @@ class ChoresRepository(Protocol):
         ...
 
     async def get_instances_by_association(
-        self, association_id: str, active_only: bool = True
+        self, association_id: UUID, active_only: bool = True
     ) -> list[ChoreInstance]:
         """Retrieve instances linked to a specific association.
 
@@ -252,7 +253,7 @@ class ChoresRepository(Protocol):
         """
         ...
 
-    async def archive_instances_by_association(self, association_id: str) -> int:
+    async def archive_instances_by_association(self, association_id: UUID) -> int:
         """Archive all active instances for an association.
 
         Sets status to ARCHIVED for instances that are ACTIVE or IN_PROGRESS.
@@ -267,7 +268,7 @@ class ChoresRepository(Protocol):
 
     async def get_instance_for_period(
         self,
-        association_id: str,
+        association_id: UUID,
         period_start: date,
         period_end: date,
     ) -> ChoreInstance | None:
@@ -316,7 +317,7 @@ class ChoresRepository(Protocol):
         ...
 
     async def bulk_update_master_status(
-        self, master_ids: list[str], status: "MasterChoreStatus"
+        self, master_ids: list[UUID], status: "MasterChoreStatus"
     ) -> int:
         """Update the status of multiple master chores at once.
 

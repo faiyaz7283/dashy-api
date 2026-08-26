@@ -2,40 +2,46 @@
 
 Provides test configuration, mock providers, and container overrides
 for unit, integration, and API tests.
+
+Test isolation uses PostgreSQL — tables are created once per session,
+and individual tests clean their own data as needed.
 """
 
-import asyncio
+import os
 from unittest.mock import AsyncMock
 
 import pytest
 
-from app.config import Settings
+# Configure test environment BEFORE any app imports.
+# This ensures Settings reads POSTGRES_* from .env.test, not defaults.
+os.environ.setdefault("ENVIRONMENT", "testing")
+
+from dotenv import load_dotenv
+
+load_dotenv(".env.test", override=True)
+
+from app.config import Settings  # noqa: E402
 
 
 @pytest.fixture(autouse=True, scope="session")
-def setup_test_database():
+async def setup_test_database():
     """Create database tables before any tests run.
 
     This fixture runs once per test session and ensures all SQLModel
-    tables exist in the test database with the current schema.
-    Drops and recreates tables to ensure schema consistency.
-    Seeds the database with test family members for calendar tests.
+    tables exist in the test PostgreSQL database with the current schema.
+    Seeds the database with test family members for tests that need them.
     """
-    from sqlmodel import SQLModel
-
-    from app.core.database import get_async_session_factory, sync_engine
+    from app.core.database import create_db_and_tables, dispose_engine, get_async_session_factory
     from app.domain.family.models import FamilyMember
     from app.infrastructure.persistence.family_repository import FamilyRepositoryImpl
 
-    # Drop all tables and recreate to ensure schema matches current models
-    SQLModel.metadata.drop_all(sync_engine)
-    SQLModel.metadata.create_all(sync_engine)
+    await create_db_and_tables()
 
-    # Seed test family members for calendar tests
-    async def seed_test_data():
-        session_factory = get_async_session_factory()
-        async with session_factory() as session:
-            repo = FamilyRepositoryImpl(session)
+    session_factory = get_async_session_factory()
+    async with session_factory() as session:
+        repo = FamilyRepositoryImpl(session)
+        existing = await repo.get_all()
+        if not existing:
             test_members = [
                 FamilyMember(
                     id="faiyaz",
@@ -55,8 +61,9 @@ def setup_test_database():
             for member in test_members:
                 await repo.save(member)
 
-    asyncio.run(seed_test_data())
     yield
+
+    await dispose_engine()
 
 
 @pytest.fixture

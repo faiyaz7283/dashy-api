@@ -99,13 +99,13 @@ All three must pass before you tell the user the task is complete. (API has no s
 
 ### Database architecture
 
-**Development:** SQLite at `/app/data/dashy.db` on Docker volume `api-data` (not git-tracked).
+**Development:** PostgreSQL via Docker service `postgres:18-alpine`, connection via `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` env vars. Data persists on `postgres-data` volume (not git-tracked).
 
-**Production:** Separate database on Pi's Docker volume, configured via `DATABASE_URL` in production `.env`.
+**Production:** Separate PostgreSQL database on Pi's Docker volume, configured via `POSTGRES_*` env vars in production `.env`.
 
-**Testing:** Isolated `test.db` created by `tests/conftest.py` — tests never modify the dev database.
+**Testing:** Tests use the same PostgreSQL instance but connect to a separate `dashy_test` database. Test isolation is handled by cleaning tables in fixtures.
 
-**Migrations:** Alembic manages schema changes. Migrations run automatically on `make dev-up` via `entrypoint.sh`. Manual migration commands:
+**Migrations:** Alembic manages schema changes with async PostgreSQL support. Migrations run automatically on `make dev-up` via `entrypoint.sh` (which waits for PostgreSQL readiness). Manual migration commands:
 
 ```bash
 make migrate              # Apply pending migrations
@@ -170,13 +170,13 @@ These standards apply to **all code** in the project. Every agent must follow th
 
 ### Test isolation
 
-**Tests use a separate `test.db` database** (not the dev `dashy.db`). This is configured in `tests/conftest.py` by setting `DATABASE_URL` **before any imports**, ensuring tests never modify the development database.
+**Tests use a separate PostgreSQL database** (`dashy_test`) configured via `POSTGRES_*` env vars in `.env.test`. The `tests/conftest.py` sets up the test database and handles table cleanup between tests.
 
 The setup order in `conftest.py` is critical:
-1. Set `DATABASE_URL` environment variable to point to `test.db`
-2. Import application modules (which read `DATABASE_URL` at import time)
+1. Load `.env.test` to configure `POSTGRES_*` variables
+2. Import application modules (which read settings at import time)
 3. Create tables and run tests
-4. Clean up `test.db` after tests complete
+4. Clean up tables after tests complete
 
 Never modify this setup order — it ensures complete isolation between dev and test databases.
 

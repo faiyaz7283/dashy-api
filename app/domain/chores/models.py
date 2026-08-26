@@ -7,6 +7,7 @@ master chore templates, chore instances, associations, categories, and tags.
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from enum import StrEnum
+from uuid import UUID
 
 
 class ExpirationBehavior(StrEnum):
@@ -64,12 +65,12 @@ class ChoreCategory:
     """A chore category for organizing master chores.
 
     Attributes:
-        id: Unique identifier (UUID string).
+        id: Unique identifier (UUID).
         name: Display name for the category.
         created_at: When the category was created.
     """
 
-    id: str
+    id: UUID
     name: str
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
@@ -100,12 +101,12 @@ class ChoreTag:
     """A tag for labeling master chores.
 
     Attributes:
-        id: Unique identifier (UUID string).
+        id: Unique identifier (UUID).
         name: Display name for the tag.
         created_at: When the tag was created.
     """
 
-    id: str
+    id: UUID
     name: str
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
@@ -162,9 +163,9 @@ class MasterChore:
         deleted_at: When the master was soft-deleted (None = active).
     """
 
-    id: str
+    id: UUID
     name: str
-    category_id: str
+    category_id: UUID
     tags: list[ChoreTag] = field(default_factory=list)
     difficulty: int = 1
     recurrence_rule: dict | None = None
@@ -229,9 +230,9 @@ class ChoreInstance:
         updated_at: When the instance was last updated.
     """
 
-    id: str
-    master_chore_id: str
-    association_id: str | None = None
+    id: UUID
+    master_chore_id: UUID
+    association_id: UUID | None = None
     period_start: date | None = None
     period_end: date | None = None
     status: InstanceStatus = InstanceStatus.ACTIVE
@@ -284,8 +285,8 @@ class ChoreAssociation:
         removed_at: When the association was soft-deleted (None = active).
     """
 
-    id: str
-    master_chore_id: str
+    id: UUID
+    master_chore_id: UUID
     member_id: str | None = None
     is_open_pool: bool = False
     created_by: str = ""
