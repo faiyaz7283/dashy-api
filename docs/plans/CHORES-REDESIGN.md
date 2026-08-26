@@ -1009,7 +1009,7 @@ class AssociationResponse(BaseModel):
 | **2** | Association logic — collaborative enforcement, archive-on-disassociate cascade, validation rules, enhanced error handling | Phase 1.5 | ✅ Complete |
 | **3** | Instance generation — generate on associate, generate on complete, safety net on board load | Phase 2 | ✅ Complete |
 | **4** | Expiration/rollover — period boundaries, expiration_behavior processing, overdue detection | Phase 3 | ✅ Complete |
-| **5** | Conditional chores — conditions JSON, evaluator, integration with safety net | Phase 3 | Pending |
+| **5** | Conditional chores — conditions JSON, evaluator, integration with safety net | Phase 3 | ✅ Complete |
 | **6** | Bulk operations — bulk pause/resume masters | Phase 1 | Pending |
 | **7** | Permission cleanup — remove all approval/age/adult code | Phase 1 | ✅ Complete (done in Phase 1) |
 | **8** | API model updates — new response fields, request fields, remove approval models | Phase 1 | ✅ Complete (done in Phase 1) |
@@ -1026,6 +1026,8 @@ class AssociationResponse(BaseModel):
 **Phase 3 commit:** `4adcf8c` (dashy-api) — Period calculation utilities, instance generation engine, safety net on board load, 21 period tests + 8 generation tests + 2 safety net tests + 1 completion trigger test.
 
 **Phase 4 commit:** `ba07639` (dashy-api) — Expiration behavior processing (DISAPPEAR/CARRY_OVER/STAY_VISIBLE/CONVERT_TO_OPEN), overdue detection, safety net integration, 7 expiration/overdue tests, fixed all alembic lint errors.
+
+**Phase 5 commit:** `2f31b72` (dashy-api) — ConditionEvaluator for weather/calendar conditions, AND/OR logic, integration with instance generation, DI wiring, 16 evaluator tests + 3 conditional generation tests.
 
 ---
 
