@@ -1021,7 +1021,7 @@ class AssociationResponse(BaseModel):
 
 **Phase 1.5 commit:** `271bda6` (dashy-api) — TEXT→Date/DateTime type enforcement, `datetime.UTC` alias, documentation-only migration.
 
-**Phase 2 commit:** TBD (dashy-api) — `AssociationConflictError`, `_validate_association()`, collaborative enforcement rules, archive-on-disassociate cascade, enhanced error handling (404/409), 11 new unit tests + 6 new API tests.
+**Phase 2 commit:** `6c93863` (dashy-api) — `AssociationConflictError`, `_validate_association()`, collaborative enforcement rules, archive-on-disassociate cascade, enhanced error handling (404/409), 11 new unit tests + 6 new API tests.
 
 ---
 
