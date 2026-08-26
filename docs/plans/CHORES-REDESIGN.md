@@ -1013,7 +1013,7 @@ class AssociationResponse(BaseModel):
 | **6** | Bulk operations — bulk pause/resume masters | Phase 1 | ✅ Complete |
 | **7** | Permission cleanup — remove all approval/age/adult code | Phase 1 | ✅ Complete (done in Phase 1) |
 | **8** | API model updates — new response fields, request fields, remove approval models | Phase 1 | ✅ Complete (done in Phase 1) |
-| **9** | Tests — unit, integration, API for all new logic | Phases 2-7 | Pending |
+| **9** | Tests — unit, integration, API for all new logic | Phases 2-7 | ✅ Complete |
 
 **Parallelization:** Phases 6, 7, 8 can run in parallel after Phase 1. Phase 9 runs throughout but is finalized last.
 
@@ -1030,6 +1030,8 @@ class AssociationResponse(BaseModel):
 **Phase 5 commit:** `2f31b72` (dashy-api) — ConditionEvaluator for weather/calendar conditions, AND/OR logic, integration with instance generation, DI wiring, 16 evaluator tests + 3 conditional generation tests.
 
 **Phase 6 commit:** `ea70b0b` (dashy-api) — Bulk master status updates, POST /api/chores/masters/bulk-status endpoint, SQLModel bulk update, 6 unit tests.
+
+**Phase 9 commit:** `8413dbd` (dashy-api) — Comprehensive test coverage: 28 integration tests for persistence layer, 4 API tests for bulk-status endpoint, 9 service tests for update/collaborative/open pool, fixed Query() annotation and datetime bug, 297 total tests pass.
 
 ---
 
