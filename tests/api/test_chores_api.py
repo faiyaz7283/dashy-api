@@ -149,10 +149,11 @@ async def test_create_master_chore_with_conditions(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_create_association(client: AsyncClient) -> None:
     """Test POST /api/v1/chores/associations creates an association."""
+    # master-005 has no existing associations
     response = await client.post(
         "/api/v1/chores/associations",
         json={
-            "master_chore_id": "master-001",
+            "master_chore_id": "master-005",
             "member_id": "arya",
             "is_open_pool": False,
             "created_by": "faiyaz",
@@ -160,7 +161,7 @@ async def test_create_association(client: AsyncClient) -> None:
     )
     assert response.status_code == 201
     data = response.json()
-    assert data["master_chore_id"] == "master-001"
+    assert data["master_chore_id"] == "master-005"
     assert data["member_id"] == "arya"
     assert data["is_open_pool"] is False
 
@@ -189,6 +190,113 @@ async def test_delete_association(client: AsyncClient) -> None:
     """Test DELETE /api/v1/chores/associations/{id}."""
     response = await client.delete("/api/v1/chores/associations/assoc-001")
     assert response.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_create_association_nonexistent_master_returns_404(
+    client: AsyncClient,
+) -> None:
+    """Test creating association with non-existent master returns 404."""
+    response = await client.post(
+        "/api/v1/chores/associations",
+        json={
+            "master_chore_id": "nonexistent",
+            "member_id": "arya",
+            "is_open_pool": False,
+            "created_by": "faiyaz",
+        },
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_association_duplicate_member_returns_409(
+    client: AsyncClient,
+) -> None:
+    """Test creating duplicate member association returns 409."""
+    # master-001 already has assoc-001 (arya)
+    response = await client.post(
+        "/api/v1/chores/associations",
+        json={
+            "master_chore_id": "master-001",
+            "member_id": "arya",
+            "is_open_pool": False,
+            "created_by": "faiyaz",
+        },
+    )
+    assert response.status_code == 409
+    data = response.json()
+    assert "already has an active association" in data["detail"]
+
+
+@pytest.mark.asyncio
+async def test_create_association_non_collaborative_conflict_returns_409(
+    client: AsyncClient,
+) -> None:
+    """Test creating second association on non-collaborative master returns 409."""
+    # master-001 already has assoc-001 (arya), try adding raya
+    response = await client.post(
+        "/api/v1/chores/associations",
+        json={
+            "master_chore_id": "master-001",
+            "member_id": "raya",
+            "is_open_pool": False,
+            "created_by": "faiyaz",
+        },
+    )
+    assert response.status_code == 409
+    data = response.json()
+    assert "already has an active member association" in data["detail"]
+
+
+@pytest.mark.asyncio
+async def test_create_association_duplicate_open_pool_returns_409(
+    client: AsyncClient,
+) -> None:
+    """Test creating duplicate open pool association returns 409."""
+    # master-003 already has assoc-002 (open pool)
+    response = await client.post(
+        "/api/v1/chores/associations",
+        json={
+            "master_chore_id": "master-003",
+            "member_id": None,
+            "is_open_pool": True,
+            "created_by": "faiyaz",
+        },
+    )
+    assert response.status_code == 409
+    data = response.json()
+    assert "already has an open pool association" in data["detail"]
+
+
+@pytest.mark.asyncio
+async def test_create_association_inactive_master_returns_404(
+    client: AsyncClient,
+) -> None:
+    """Test creating association with inactive master returns 404."""
+    # First archive master-002
+    await client.delete("/api/v1/chores/masters/master-002")
+
+    # Try to create association with archived master
+    response = await client.post(
+        "/api/v1/chores/associations",
+        json={
+            "master_chore_id": "master-002",
+            "member_id": "arya",
+            "is_open_pool": False,
+            "created_by": "faiyaz",
+        },
+    )
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_nonexistent_association_returns_404(
+    client: AsyncClient,
+) -> None:
+    """Test deleting non-existent association returns 404."""
+    response = await client.delete("/api/v1/chores/associations/nonexistent")
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio

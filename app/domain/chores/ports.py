@@ -235,3 +235,30 @@ class ChoresRepository(Protocol):
             List of active chore associations.
         """
         ...
+
+    async def get_instances_by_association(
+        self, association_id: str, active_only: bool = True
+    ) -> list[ChoreInstance]:
+        """Retrieve instances linked to a specific association.
+
+        Args:
+            association_id: FK to the association.
+            active_only: If True, only return non-completed/non-archived instances.
+
+        Returns:
+            List of matching ChoreInstance entities.
+        """
+        ...
+
+    async def archive_instances_by_association(self, association_id: str) -> int:
+        """Archive all active instances for an association.
+
+        Sets status to ARCHIVED for instances that are ACTIVE or IN_PROGRESS.
+
+        Args:
+            association_id: FK to the association.
+
+        Returns:
+            Number of instances archived.
+        """
+        ...

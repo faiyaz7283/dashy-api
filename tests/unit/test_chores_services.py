@@ -3,11 +3,12 @@
 import pytest
 
 from app.domain.chores.models import (
+    ChoreAssociation,
     InstanceStatus,
     MasterChore,
     MasterChoreStatus,
 )
-from app.domain.chores.services import ChoresService
+from app.domain.chores.services import AssociationConflictError, ChoresService
 from app.infrastructure.chores.mock_adapter import MockChoresRepository
 
 
@@ -233,3 +234,231 @@ class TestDeleteMasterChore:
         masters = await service.get_master_chores(include_archived=True)
         master_ids = {m.id for m in masters}
         assert "master-001" in master_ids
+
+
+class TestAssociationValidation:
+    """Tests for association collaborative enforcement."""
+
+    @pytest.mark.asyncio
+    async def test_create_association_non_collaborative_fails_if_exists(
+        self, service: ChoresService
+    ) -> None:
+        """Test that non-collaborative master rejects second member association."""
+        # master-001 already has assoc-001 (arya)
+        new_association = ChoreAssociation(
+            id="assoc-new",
+            master_chore_id="master-001",
+            member_id="raya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+
+        with pytest.raises(AssociationConflictError) as exc_info:
+            await service.create_association(new_association)
+
+        assert "already has an active member association" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_create_association_duplicate_member_fails(
+        self, service: ChoresService
+    ) -> None:
+        """Test that same member can't have two associations for same master."""
+        # master-001 already has assoc-001 (arya)
+        duplicate_association = ChoreAssociation(
+            id="assoc-dup",
+            master_chore_id="master-001",
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+
+        with pytest.raises(AssociationConflictError) as exc_info:
+            await service.create_association(duplicate_association)
+
+        assert "already has an active association" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_create_association_collaborative_allows_multiple(
+        self, service: ChoresService
+    ) -> None:
+        """Test that collaborative master allows multiple member associations."""
+        # Create a collaborative master
+        collaborative_master = MasterChore(
+            id="master-collab",
+            name="Collaborative Chore",
+            category_id="cat-kitchen",
+            is_collaborative=True,
+            created_by="faiyaz",
+        )
+        await service.create_master_chore(collaborative_master, tag_ids=[])
+
+        # First association
+        assoc1 = ChoreAssociation(
+            id="assoc-collab-1",
+            master_chore_id="master-collab",
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+        await service.create_association(assoc1)
+
+        # Second association (different member) should succeed
+        assoc2 = ChoreAssociation(
+            id="assoc-collab-2",
+            master_chore_id="master-collab",
+            member_id="raya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+        result = await service.create_association(assoc2)
+
+        assert result.id == "assoc-collab-2"
+        assert result.member_id == "raya"
+
+    @pytest.mark.asyncio
+    async def test_create_association_collaborative_duplicate_member_fails(
+        self, service: ChoresService
+    ) -> None:
+        """Test that even collaborative master rejects duplicate member."""
+        # Create a collaborative master
+        collaborative_master = MasterChore(
+            id="master-collab-2",
+            name="Collaborative Chore 2",
+            category_id="cat-kitchen",
+            is_collaborative=True,
+            created_by="faiyaz",
+        )
+        await service.create_master_chore(collaborative_master, tag_ids=[])
+
+        # First association
+        assoc1 = ChoreAssociation(
+            id="assoc-collab2-1",
+            master_chore_id="master-collab-2",
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+        await service.create_association(assoc1)
+
+        # Duplicate member should fail
+        duplicate = ChoreAssociation(
+            id="assoc-collab2-dup",
+            master_chore_id="master-collab-2",
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+
+        with pytest.raises(AssociationConflictError) as exc_info:
+            await service.create_association(duplicate)
+
+        assert "already has an active association" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_create_open_pool_fails_if_exists(self, service: ChoresService) -> None:
+        """Test that only one open pool association per master is allowed."""
+        # master-003 already has assoc-002 (open pool)
+        new_open_pool = ChoreAssociation(
+            id="assoc-open-pool-2",
+            master_chore_id="master-003",
+            member_id=None,
+            is_open_pool=True,
+            created_by="faiyaz",
+        )
+
+        with pytest.raises(AssociationConflictError) as exc_info:
+            await service.create_association(new_open_pool)
+
+        assert "already has an open pool association" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_create_association_master_not_found(self, service: ChoresService) -> None:
+        """Test that association with non-existent master raises ValueError."""
+        association = ChoreAssociation(
+            id="assoc-bad",
+            master_chore_id="master-nonexistent",
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+
+        with pytest.raises(ValueError, match="not found"):
+            await service.create_association(association)
+
+    @pytest.mark.asyncio
+    async def test_create_association_master_not_active(self, service: ChoresService) -> None:
+        """Test that association with inactive master raises ValueError."""
+        # Archive master-001
+        await service.delete_master_chore("master-001")
+
+        association = ChoreAssociation(
+            id="assoc-inactive",
+            master_chore_id="master-001",
+            member_id="raya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+
+        with pytest.raises(ValueError, match="not active"):
+            await service.create_association(association)
+
+
+class TestDeleteAssociationCascade:
+    """Tests for association deletion and instance archival."""
+
+    @pytest.mark.asyncio
+    async def test_delete_association_archives_instances(
+        self, service: ChoresService
+    ) -> None:
+        """Test that deleting association archives its active instances."""
+        # assoc-001 has inst-001 (ACTIVE) and inst-006 (COMPLETED)
+        archived_count = await service.delete_association("assoc-001")
+
+        # Only ACTIVE/IN_PROGRESS instances should be archived
+        assert archived_count == 1
+
+        # Verify inst-001 is archived
+        inst_001 = await service.repository.get_instance_by_id("inst-001")
+        assert inst_001 is not None
+        assert inst_001.status == InstanceStatus.ARCHIVED
+
+        # Verify inst-006 is still completed (not affected)
+        inst_006 = await service.repository.get_instance_by_id("inst-006")
+        assert inst_006 is not None
+        assert inst_006.status == InstanceStatus.COMPLETED
+
+    @pytest.mark.asyncio
+    async def test_delete_association_soft_deletes(
+        self, service: ChoresService
+    ) -> None:
+        """Test that delete sets removed_at on association."""
+        await service.delete_association("assoc-001")
+
+        # Association should still exist but have removed_at set
+        association = await service.repository.get_association("assoc-001")
+        assert association is not None
+        assert association.removed_at is not None
+
+    @pytest.mark.asyncio
+    async def test_delete_association_not_found(self, service: ChoresService) -> None:
+        """Test that deleting non-existent association raises ValueError."""
+        with pytest.raises(ValueError, match="not found"):
+            await service.delete_association("assoc-nonexistent")
+
+    @pytest.mark.asyncio
+    async def test_delete_association_no_instances(self, service: ChoresService) -> None:
+        """Test that deleting association with no instances succeeds."""
+        # Create a new association with no instances
+        new_association = ChoreAssociation(
+            id="assoc-no-instances",
+            master_chore_id="master-005",
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+        await service.create_association(new_association)
+
+        # Delete should succeed with 0 archived
+        archived_count = await service.delete_association("assoc-no-instances")
+        assert archived_count == 0
+

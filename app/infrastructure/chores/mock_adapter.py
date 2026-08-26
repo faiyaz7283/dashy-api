@@ -563,3 +563,45 @@ class MockChoresRepository:
             List of active ChoreAssociation entities.
         """
         return await self.list_associations(member_id=member_id)
+
+    async def get_instances_by_association(
+        self, association_id: str, active_only: bool = True
+    ) -> list[ChoreInstance]:
+        """Return instances linked to a specific association.
+
+        Args:
+            association_id: FK to the association.
+            active_only: If True, only return non-completed/non-archived instances.
+
+        Returns:
+            List of matching ChoreInstance entities.
+        """
+        instances = [i for i in self._instances if i.association_id == association_id]
+        if active_only:
+            instances = [
+                i for i in instances
+                if i.status in (InstanceStatus.ACTIVE, InstanceStatus.IN_PROGRESS)
+            ]
+        return instances
+
+    async def archive_instances_by_association(self, association_id: str) -> int:
+        """Archive all active instances for an association.
+
+        Sets status to ARCHIVED for instances that are ACTIVE or IN_PROGRESS.
+
+        Args:
+            association_id: FK to the association.
+
+        Returns:
+            Number of instances archived.
+        """
+        archived_count = 0
+        for instance in self._instances:
+            if (
+                instance.association_id == association_id
+                and instance.status in (InstanceStatus.ACTIVE, InstanceStatus.IN_PROGRESS)
+            ):
+                instance.status = InstanceStatus.ARCHIVED
+                instance.updated_at = datetime.now(UTC)
+                archived_count += 1
+        return archived_count

@@ -34,6 +34,7 @@ from app.domain.chores.models import (
     MasterChore,
     MasterChoreStatus,
 )
+from app.domain.chores.services import AssociationConflictError
 
 router = APIRouter(prefix="/chores", tags=["chores"])
 
@@ -308,6 +309,10 @@ async def create_association(
 
     Returns:
         The newly created association.
+
+    Raises:
+        HTTPException 404: Master chore not found or not active.
+        HTTPException 409: Association violates collaborative constraints.
     """
     association = ChoreAssociation(
         id=str(uuid4()),
@@ -317,7 +322,13 @@ async def create_association(
         created_by=body.created_by,
     )
 
-    created = await chores_service.create_association(association)
+    try:
+        created = await chores_service.create_association(association)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AssociationConflictError as exc:
+        raise HTTPException(status_code=409, detail=exc.message) from exc
+
     return _association_to_response(created)
 
 
@@ -326,13 +337,19 @@ async def delete_association(
     association_id: str,
     chores_service: ChoresServiceDep,
 ) -> None:
-    """Soft-delete an association.
+    """Soft-delete an association and archive its active instances.
 
     Args:
         association_id: Association identifier.
         chores_service: Injected chores service.
+
+    Raises:
+        HTTPException 404: Association not found.
     """
-    await chores_service.delete_association(association_id)
+    try:
+        await chores_service.delete_association(association_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post("/instances/{instance_id}/claim", response_model=ChoreInstanceResponse)

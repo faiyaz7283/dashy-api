@@ -1002,19 +1002,26 @@ class AssociationResponse(BaseModel):
 
 ## 11. Implementation Phases
 
-| Phase | What | Depends On | Estimated Effort |
-|-------|------|-----------|------------------|
-| **1** | Model changes — add fields to MasterChore, create `chore_associations` table, add `association_id` to ChoreInstance, remove approval fields, new migration | Nothing | Medium |
-| **2** | Association logic — CRUD for associations, collaborative enforcement, associate/disassociate endpoints | Phase 1 | Medium |
-| **3** | Instance generation — generate on associate, generate on complete, safety net on board load | Phase 2 | Large |
-| **4** | Expiration/rollover — period boundaries, expiration_behavior processing, overdue detection | Phase 3 | Medium |
-| **5** | Conditional chores — conditions JSON, evaluator, integration with safety net | Phase 3 | Large |
-| **6** | Bulk operations — bulk pause/resume masters | Phase 1 | Small |
-| **7** | Permission cleanup — remove all approval/age/adult code | Phase 1 | Small |
-| **8** | API model updates — new response fields, request fields, remove approval models | Phase 1 | Small |
-| **9** | Tests — unit, integration, API for all new logic | Phases 2-7 | Large |
+| Phase | What | Depends On | Status |
+|-------|------|-----------|--------|
+| **1** | Model changes — add fields to MasterChore, create `chore_associations` table, add `association_id` to ChoreInstance, remove approval fields, new migration | Nothing | ✅ Complete |
+| **1.5** | Date/time standardization — proper `date`/`datetime` types for all chores fields, `datetime.now(UTC)` throughout | Phase 1 | ✅ Complete |
+| **2** | Association logic — collaborative enforcement, archive-on-disassociate cascade, validation rules, enhanced error handling | Phase 1.5 | ✅ Complete |
+| **3** | Instance generation — generate on associate, generate on complete, safety net on board load | Phase 2 | Pending |
+| **4** | Expiration/rollover — period boundaries, expiration_behavior processing, overdue detection | Phase 3 | Pending |
+| **5** | Conditional chores — conditions JSON, evaluator, integration with safety net | Phase 3 | Pending |
+| **6** | Bulk operations — bulk pause/resume masters | Phase 1 | Pending |
+| **7** | Permission cleanup — remove all approval/age/adult code | Phase 1 | ✅ Complete (done in Phase 1) |
+| **8** | API model updates — new response fields, request fields, remove approval models | Phase 1 | ✅ Complete (done in Phase 1) |
+| **9** | Tests — unit, integration, API for all new logic | Phases 2-7 | Pending |
 
 **Parallelization:** Phases 6, 7, 8 can run in parallel after Phase 1. Phase 9 runs throughout but is finalized last.
+
+**Phase 1 commit:** `6d22096` (dashy-api) — model changes, migration, schemas, services rewrite, test updates.
+
+**Phase 1.5 commit:** `271bda6` (dashy-api) — TEXT→Date/DateTime type enforcement, `datetime.UTC` alias, documentation-only migration.
+
+**Phase 2 commit:** TBD (dashy-api) — `AssociationConflictError`, `_validate_association()`, collaborative enforcement rules, archive-on-disassociate cascade, enhanced error handling (404/409), 11 new unit tests + 6 new API tests.
 
 ---
 

@@ -423,6 +423,64 @@ class ChoresRepositoryImpl:
         """
         return await self.list_associations(member_id=member_id)
 
+    async def get_instances_by_association(
+        self, association_id: str, active_only: bool = True
+    ) -> list[ChoreInstance]:
+        """Retrieve instances linked to a specific association.
+
+        Args:
+            association_id: FK to the association.
+            active_only: If True, only return non-completed/non-archived instances.
+
+        Returns:
+            List of matching domain ChoreInstance entities.
+        """
+        statement = select(ChoreInstanceDB).where(
+            ChoreInstanceDB.association_id == association_id
+        )
+        if active_only:
+            statement = statement.where(
+                ChoreInstanceDB.status.in_([
+                    InstanceStatus.ACTIVE.value,
+                    InstanceStatus.IN_PROGRESS.value,
+                ])
+            )
+        statement = statement.order_by(ChoreInstanceDB.created_at.desc())
+        result = await self.session.execute(statement)
+        db_instances = result.scalars().all()
+        return [self._instance_to_domain(db_inst) for db_inst in db_instances]
+
+    async def archive_instances_by_association(self, association_id: str) -> int:
+        """Archive all active instances for an association.
+
+        Sets status to ARCHIVED for instances that are ACTIVE or IN_PROGRESS.
+
+        Args:
+            association_id: FK to the association.
+
+        Returns:
+            Number of instances archived.
+        """
+        statement = select(ChoreInstanceDB).where(
+            ChoreInstanceDB.association_id == association_id,
+            ChoreInstanceDB.status.in_([
+                InstanceStatus.ACTIVE.value,
+                InstanceStatus.IN_PROGRESS.value,
+            ]),
+        )
+        result = await self.session.execute(statement)
+        db_instances = result.scalars().all()
+
+        archived_count = 0
+        for db_instance in db_instances:
+            db_instance.status = InstanceStatus.ARCHIVED.value
+            db_instance.updated_at = datetime.now(UTC)
+            self.session.add(db_instance)
+            archived_count += 1
+
+        await self.session.commit()
+        return archived_count
+
     # ── Private helpers ─────────────────────────────────────────
 
     async def _get_tags_for_master(self, master_chore_id: str) -> list[ChoreTag]:

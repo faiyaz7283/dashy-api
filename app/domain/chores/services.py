@@ -1,7 +1,8 @@
 """Chores domain services.
 
 Business logic for chore management including claim/assign
-mutual exclusivity and instance status transitions.
+mutual exclusivity, instance status transitions, and association
+collaborative enforcement.
 """
 
 from datetime import UTC, datetime
@@ -19,6 +20,23 @@ from app.domain.chores.models import (
 from app.domain.chores.ports import ChoresRepository
 
 logger = get_logger(__name__)
+
+
+class AssociationConflictError(Exception):
+    """Raised when an association violates collaborative constraints.
+
+    Attributes:
+        message: Human-readable description of the conflict.
+    """
+
+    def __init__(self, message: str) -> None:
+        """Initialize with a conflict description.
+
+        Args:
+            message: Human-readable description of the conflict.
+        """
+        self.message = message
+        super().__init__(message)
 
 
 class ChoresService:
@@ -317,25 +335,127 @@ class ChoresService:
     async def create_association(self, association: ChoreAssociation) -> ChoreAssociation:
         """Create a new association between a master chore and a member/pool.
 
+        Validates collaborative constraints before creating:
+        - Master must exist and be active
+        - Non-collaborative master: only one non-open-pool association allowed
+        - Open pool: one per master
+        - Collaborative master: multiple non-open-pool associations allowed
+
         Args:
             association: ChoreAssociation entity to create.
 
         Returns:
             The created association.
+
+        Raises:
+            ValueError: If the master chore is not found or not active.
+            AssociationConflictError: If collaborative constraints are violated.
         """
+        master = await self.repository.get_master_chore_by_id(association.master_chore_id)
+        if not master:
+            raise ValueError(f"Master chore '{association.master_chore_id}' not found")
+        if master.status != MasterChoreStatus.ACTIVE:
+            raise ValueError(
+                f"Master chore '{association.master_chore_id}' is not active "
+                f"(status: {master.status.value})"
+            )
+
+        existing = await self.repository.get_associations_by_master(association.master_chore_id)
+        self._validate_association(master, association, existing)
+
         logger.info(
             "create_association",
             association_id=association.id,
             master_chore_id=association.master_chore_id,
             member_id=association.member_id,
+            is_open_pool=association.is_open_pool,
         )
         return await self.repository.create_association(association)
 
-    async def delete_association(self, association_id: str) -> None:
-        """Soft-delete an association.
+    async def delete_association(self, association_id: str) -> int:
+        """Soft-delete an association and archive its active instances.
+
+        Archives all ACTIVE/IN_PROGRESS instances linked to this association
+        before soft-deleting the association itself.
 
         Args:
             association_id: Unique identifier for the association.
+
+        Returns:
+            Number of instances archived.
+
+        Raises:
+            ValueError: If the association is not found.
         """
-        logger.info("delete_association", association_id=association_id)
+        association = await self.repository.get_association(association_id)
+        if not association:
+            raise ValueError(f"Association '{association_id}' not found")
+
+        archived_count = await self.repository.archive_instances_by_association(association_id)
+
+        logger.info(
+            "delete_association",
+            association_id=association_id,
+            archived_instances=archived_count,
+        )
         await self.repository.delete_association(association_id)
+        return archived_count
+
+    @staticmethod
+    def _validate_association(
+        master: MasterChore,
+        new_association: ChoreAssociation,
+        existing_associations: list[ChoreAssociation],
+    ) -> None:
+        """Enforce collaborative rules for association creation.
+
+        Rules:
+        - Open pool: only one per master (regardless of collaborative flag)
+        - Non-collaborative: only one non-open-pool association allowed
+        - Collaborative: multiple non-open-pool associations allowed
+        - Duplicate member: same member can't have two active associations
+          for the same master
+
+        Args:
+            master: The master chore being associated.
+            new_association: The proposed association to validate.
+            existing_associations: Currently active associations for this master.
+
+        Raises:
+            AssociationConflictError: If any constraint is violated.
+        """
+        if new_association.is_open_pool:
+            open_pool_exists = [a for a in existing_associations if a.is_open_pool]
+            if open_pool_exists:
+                raise AssociationConflictError(
+                    f"Master '{master.id}' already has an open pool association"
+                )
+            return
+
+        if not master.is_collaborative:
+            member_associations = [
+                a for a in existing_associations
+                if not a.is_open_pool and a.member_id == new_association.member_id
+            ]
+            if member_associations:
+                raise AssociationConflictError(
+                    f"Member '{new_association.member_id}' already has an active "
+                    f"association for non-collaborative master '{master.id}'"
+                )
+
+            non_open_pool = [a for a in existing_associations if not a.is_open_pool]
+            if non_open_pool:
+                raise AssociationConflictError(
+                    f"Non-collaborative master '{master.id}' already has an active "
+                    f"member association"
+                )
+        else:
+            duplicate = [
+                a for a in existing_associations
+                if not a.is_open_pool and a.member_id == new_association.member_id
+            ]
+            if duplicate:
+                raise AssociationConflictError(
+                    f"Member '{new_association.member_id}' already has an active "
+                    f"association for collaborative master '{master.id}'"
+                )
