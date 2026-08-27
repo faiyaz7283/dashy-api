@@ -1034,3 +1034,147 @@ class TestOpenPoolGeneration:
         assert instances[0].association_id == pool_assoc_id
         # Open pool instances have no claimed_by initially
         assert instances[0].claimed_by is None
+
+
+class TestOneTimeChoreGeneration:
+    """Tests for one-time chore (frequency='once') instance generation."""
+
+    @pytest.mark.asyncio
+    async def test_one_time_generates_instance_on_association(
+        self, service: ChoresService
+    ) -> None:
+        """Test that one-time chore generates an instance when associated."""
+        # Create one-time master (no recurrence_rule)
+        once_master_id = uuid7()
+        master = MasterChore(
+            id=once_master_id,
+            name="One-Time Chore",
+            category_id=_CAT_KITCHEN,
+            recurrence_rule=None,  # One-time
+            created_by="faiyaz",
+        )
+        await service.create_master_chore(master, tag_ids=[])
+
+        # Create association
+        once_assoc_id = uuid7()
+        assoc = ChoreAssociation(
+            id=once_assoc_id,
+            master_chore_id=once_master_id,
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+        await service.create_association(assoc)
+
+        # Should have generated an instance
+        instances = await service.get_instances(master_chore_id=once_master_id)
+        assert len(instances) == 1
+        assert instances[0].master_chore_id == once_master_id
+        assert instances[0].association_id == once_assoc_id
+        assert instances[0].status == InstanceStatus.ACTIVE
+        assert instances[0].assigned_to == "arya"
+
+    @pytest.mark.asyncio
+    async def test_one_time_uses_due_date(self, service: ChoresService) -> None:
+        """Test that one-time chore uses due_date for period."""
+        from datetime import date
+
+        future_date = date(2027, 6, 15)
+        once_master_id = uuid7()
+        master = MasterChore(
+            id=once_master_id,
+            name="One-Time with Due Date",
+            category_id=_CAT_KITCHEN,
+            recurrence_rule=None,
+            due_date=future_date,
+            created_by="faiyaz",
+        )
+        await service.create_master_chore(master, tag_ids=[])
+
+        once_assoc_id = uuid7()
+        assoc = ChoreAssociation(
+            id=once_assoc_id,
+            master_chore_id=once_master_id,
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+        await service.create_association(assoc)
+
+        instances = await service.get_instances(master_chore_id=once_master_id)
+        assert len(instances) == 1
+        assert instances[0].period_start == future_date
+        assert instances[0].period_end == future_date
+
+    @pytest.mark.asyncio
+    async def test_one_time_only_generates_once(
+        self, service: ChoresService
+    ) -> None:
+        """Test that one-time chore only generates one instance per association."""
+        once_master_id = uuid7()
+        master = MasterChore(
+            id=once_master_id,
+            name="One-Time Single",
+            category_id=_CAT_KITCHEN,
+            recurrence_rule=None,
+            occurrence_count=1,  # Already generated
+            created_by="faiyaz",
+        )
+        await service.create_master_chore(master, tag_ids=[])
+
+        once_assoc_id = uuid7()
+        assoc = ChoreAssociation(
+            id=once_assoc_id,
+            master_chore_id=once_master_id,
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+        # Create association directly (bypasses generation trigger)
+        await service.repository.create_association(assoc)
+
+        # Manually trigger generation
+        result = await service.generate_instance_for_association(once_assoc_id)
+
+        # Should return None (already generated)
+        assert result is None
+        instances = await service.get_instances(master_chore_id=once_master_id)
+        assert len(instances) == 0
+
+    @pytest.mark.asyncio
+    async def test_one_time_safety_net_generates(
+        self, service: ChoresService
+    ) -> None:
+        """Test that safety net generates one-time instances."""
+        once_master_id = uuid7()
+        master = MasterChore(
+            id=once_master_id,
+            name="One-Time Safety Net",
+            category_id=_CAT_KITCHEN,
+            recurrence_rule=None,
+            created_by="faiyaz",
+        )
+        await service.create_master_chore(master, tag_ids=[])
+
+        once_assoc_id = uuid7()
+        assoc = ChoreAssociation(
+            id=once_assoc_id,
+            master_chore_id=once_master_id,
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+        # Create association directly (bypasses generation trigger)
+        await service.repository.create_association(assoc)
+
+        # Verify no instances exist
+        instances_before = await service.get_instances(master_chore_id=once_master_id)
+        assert len(instances_before) == 0
+
+        # Run safety net
+        generated = await service.ensure_current_instances()
+
+        # Should have generated one instance
+        assert len(generated) >= 1
+        instances_after = await service.get_instances(master_chore_id=once_master_id)
+        assert len(instances_after) == 1
