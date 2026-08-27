@@ -1,6 +1,6 @@
 """Tests for calendar domain services and mock data."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from app.api.models.calendar import Attendee, CalendarEvent
 from app.domain.calendar.services import (
@@ -15,19 +15,19 @@ class TestParseIsoDate:
     """Tests for ISO date parsing utility."""
 
     def test_parse_date_only(self):
-        """Test parsing date-only format (YYYY-MM-DD)."""
+        """Test parsing date-only format (YYYY-MM-DD) returns UTC midnight."""
         result = parse_iso_date("2026-08-15")
-        assert result == datetime(2026, 8, 15, 0, 0, 0)
+        assert result == datetime(2026, 8, 15, 0, 0, 0, tzinfo=UTC)
 
     def test_parse_datetime_format(self):
-        """Test parsing datetime format (YYYY-MM-DDTHH:MM:SS)."""
+        """Test parsing datetime format (YYYY-MM-DDTHH:MM:SS) returns UTC."""
         result = parse_iso_date("2026-08-15T14:30:00")
-        assert result == datetime(2026, 8, 15, 14, 30, 0)
+        assert result == datetime(2026, 8, 15, 14, 30, 0, tzinfo=UTC)
 
     def test_parse_datetime_with_z_suffix(self):
-        """Test parsing datetime with Z suffix."""
+        """Test parsing datetime with Z suffix returns UTC."""
         result = parse_iso_date("2026-08-15T14:30:00Z")
-        assert result == datetime(2026, 8, 15, 14, 30, 0)
+        assert result == datetime(2026, 8, 15, 14, 30, 0, tzinfo=UTC)
 
 
 class TestMockCalendarEvents:
