@@ -85,8 +85,8 @@ class GoogleCalendarAdapter:
                 service.events()
                 .list(
                     calendarId=calendar_id,
-                    timeMin=time_min.isoformat() + "Z",
-                    timeMax=time_max.isoformat() + "Z",
+                    timeMin=time_min.isoformat(),
+                    timeMax=time_max.isoformat(),
                     singleEvents=True,
                     orderBy="startTime",
                 )
@@ -131,8 +131,8 @@ class GoogleCalendarAdapter:
                 service.events()
                 .list(
                     calendarId=calendar_id,
-                    timeMin=time_min.isoformat() + "Z",
-                    timeMax=time_max.isoformat() + "Z",
+                    timeMin=time_min.isoformat(),
+                    timeMax=time_max.isoformat(),
                     singleEvents=False,
                     orderBy="updated",
                 )
