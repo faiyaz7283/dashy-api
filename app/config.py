@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     )
 
     # CORS
-    CORS_ORIGINS: str = "https://dashy.local,https://dashy-v2.local,http://localhost:3000,http://dashy.local"
+    CORS_ORIGINS: str = "https://dashy.local,http://localhost:3000,http://dashy.local"
 
     # Database — PostgreSQL connection (all values from environment)
     POSTGRES_USER: str
