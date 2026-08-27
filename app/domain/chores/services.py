@@ -499,6 +499,9 @@ class ChoresService:
         Checks limits (end_date, max_occurrences), calculates the next period,
         and creates an instance if one doesn't already exist for that period.
 
+        For one-time chores (recurrence_rule is None), generates a single
+        instance using due_date or today.
+
         Args:
             association_id: FK to the association to generate for.
             master: Optional pre-fetched master chore (avoids extra query).
@@ -518,9 +521,6 @@ class ChoresService:
         if master.status != MasterChoreStatus.ACTIVE:
             return None
 
-        if master.recurrence_rule is None:
-            return None
-
         if master.conditions and self.condition_evaluator:
             conditions_config = ConditionsConfig(**master.conditions)
             conditions_met = await self.condition_evaluator.evaluate(conditions_config)
@@ -531,6 +531,10 @@ class ChoresService:
                     master_id=master.id,
                 )
                 return None
+
+        # Handle one-time chores (no recurrence rule)
+        if master.recurrence_rule is None:
+            return await self._generate_one_time_instance(association_id, master)
 
         rule = RecurrenceRule(**master.recurrence_rule)
         today = datetime.now(UTC).date()
@@ -599,6 +603,73 @@ class ChoresService:
 
         return created
 
+    async def _generate_one_time_instance(
+        self,
+        association_id: UUID,
+        master: MasterChore,
+    ) -> ChoreInstance | None:
+        """Generate an instance for a one-time chore.
+
+        Uses due_date if set, otherwise uses today. Only generates one instance
+        per association (checks occurrence_count).
+
+        Args:
+            association_id: FK to the association.
+            master: The master chore entity.
+
+        Returns:
+            The created ChoreInstance, or None if already generated.
+        """
+        # One-time chores should only have one instance
+        if master.occurrence_count >= 1:
+            logger.info(
+                "generate_one_time_instance_skipped_already_generated",
+                association_id=association_id,
+                master_id=master.id,
+            )
+            return None
+
+        association = await self.repository.get_association(association_id)
+        if not association:
+            return None
+
+        # Use due_date if set, otherwise use today
+        period_date = master.due_date if master.due_date else datetime.now(UTC).date()
+
+        # Check if instance already exists for this date
+        existing = await self.repository.get_instance_for_period(
+            association_id, period_date, period_date
+        )
+        if existing:
+            return existing
+
+        instance = ChoreInstance(
+            id=uuid7(),
+            master_chore_id=master.id,
+            association_id=association_id,
+            period_start=period_date,
+            period_end=period_date,
+            status=InstanceStatus.ACTIVE,
+            claimed_by=association.member_id if not association.is_open_pool else None,
+            assigned_to=association.member_id if not association.is_open_pool else None,
+        )
+
+        created = await self.repository.create_instance(instance)
+
+        await self.repository.update_master_chore(
+            master.id,
+            {"occurrence_count": 1},
+        )
+
+        logger.info(
+            "generate_one_time_instance",
+            instance_id=created.id,
+            association_id=association_id,
+            period_date=period_date.isoformat(),
+        )
+
+        return created
+
     async def ensure_current_instances(self) -> list[ChoreInstance]:
         """Safety net: ensure every active association has a current instance.
 
@@ -626,9 +697,6 @@ class ChoresService:
 
             master = masters_cache[master_id]
             if not master or master.status != MasterChoreStatus.ACTIVE:
-                continue
-
-            if master.recurrence_rule is None:
                 continue
 
             result = await self.generate_instance_for_association(association.id, master)
