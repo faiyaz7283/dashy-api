@@ -162,12 +162,16 @@ def parse_event(
     end = gcal_event.get("end", {})
 
     if "dateTime" in start:
-        start_iso = start["dateTime"]
-        end_iso = end.get("dateTime", "")
+        # Timed event: convert to UTC
+        start_dt = datetime.fromisoformat(start["dateTime"].replace("Z", "+00:00"))
+        end_dt = datetime.fromisoformat(end.get("dateTime", "").replace("Z", "+00:00"))
+        start_iso = start_dt.astimezone(UTC).isoformat()
+        end_iso = end_dt.astimezone(UTC).isoformat()
         all_day = False
     else:
-        start_iso = start.get("date", "") + "T00:00:00"
-        end_iso = end.get("date", "") + "T23:59:00"
+        # All-day event: use UTC midnight
+        start_iso = start.get("date", "") + "T00:00:00+00:00"
+        end_iso = end.get("date", "") + "T23:59:00+00:00"
         all_day = True
 
     attendees, organizer_key = parse_attendees(gcal_event, family_members)
