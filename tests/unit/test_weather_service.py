@@ -92,9 +92,11 @@ class TestTimestampHelpers:
 
 
 class TestTodayMidnightTimestamp:
-    def test_returns_midnight_in_utc(self):
+    def test_returns_midnight_in_configured_timezone(self):
+        from app.config import settings
+
         ts = _get_today_midnight_timestamp()
-        dt = datetime.fromtimestamp(ts, tz=UTC)
+        dt = datetime.fromtimestamp(ts, tz=settings.tz)
         assert dt.hour == 0
         assert dt.minute == 0
         assert dt.second == 0

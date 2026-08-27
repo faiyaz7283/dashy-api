@@ -85,17 +85,17 @@ def _ts_to_datetime(ts: int) -> str:
 
 
 def _ts_to_date(ts: int) -> str:
-    """Convert Unix timestamp to ISO date string (YYYY-MM-DD) in UTC."""
-    return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%d")
+    """Convert Unix timestamp to ISO date string (YYYY-MM-DD) in configured timezone."""
+    return datetime.fromtimestamp(ts, tz=settings.tz).strftime("%Y-%m-%d")
 
 
 def _get_today_midnight_timestamp() -> int:
-    """Get Unix timestamp for today's midnight in UTC.
+    """Get Unix timestamp for today's midnight in configured timezone.
 
     Returns:
-        Unix timestamp for today's midnight UTC.
+        Unix timestamp for today's midnight in the configured timezone.
     """
-    now = datetime.now(UTC)
+    now = datetime.now(settings.tz)
     today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
     return int(today_midnight.timestamp())
 
@@ -187,7 +187,7 @@ def _build_response(
     forecast: list[DailyForecast] = []
     seen_dates: set[str] = set()
 
-    # Get today's date in UTC to filter out past days
+    # Get today's date in configured timezone to filter out past days
     now_ts = int(datetime.now(UTC).timestamp())
     today_date = _ts_to_date(now_ts)
 
