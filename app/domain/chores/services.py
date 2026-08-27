@@ -308,17 +308,17 @@ class ChoresService:
         if not instance:
             raise ValueError(f"Instance '{instance_id}' not found")
 
-        now_iso = datetime.now(UTC).isoformat()
-        updates: dict = {"updated_at": datetime.now(UTC)}
+        now = datetime.now(UTC)
+        updates: dict = {"updated_at": now}
 
         if new_status == InstanceStatus.IN_PROGRESS:
             updates["status"] = InstanceStatus.IN_PROGRESS
-            updates["started_at"] = now_iso
+            updates["started_at"] = now
 
         elif new_status == InstanceStatus.COMPLETED:
             updates["status"] = InstanceStatus.COMPLETED
             updates["completed_by"] = actor_id
-            updates["completed_at"] = now_iso
+            updates["completed_at"] = now
 
         else:
             updates["status"] = new_status
