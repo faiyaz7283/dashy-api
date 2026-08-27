@@ -23,19 +23,23 @@ def get_default_week_dates() -> tuple[datetime, datetime]:
 
 
 def parse_iso_date(date_str: str) -> datetime:
-    """Parse an ISO format date string to datetime.
+    """Parse an ISO format date string to timezone-aware UTC datetime.
 
     Args:
         date_str: ISO format date string (e.g. "2026-08-08" or "2026-08-08T00:00:00").
 
     Returns:
-        Parsed datetime object.
+        Parsed timezone-aware UTC datetime object.
     """
     if "T" in date_str:
-        return datetime.fromisoformat(date_str.replace("Z", ""))
-    return datetime.strptime(date_str, "%Y-%m-%d").replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+        # Timed event: parse and convert to UTC
+        dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        return dt.astimezone(UTC) if dt.tzinfo else dt.replace(tzinfo=UTC)
+    else:
+        # Date-only: treat as UTC midnight
+        return datetime.strptime(date_str, "%Y-%m-%d").replace(
+            hour=0, minute=0, second=0, microsecond=0, tzinfo=UTC
+        )
 
 
 def parse_date_range(start_str: str, end_str: str) -> DateRange:
