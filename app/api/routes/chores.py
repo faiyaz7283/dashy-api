@@ -5,13 +5,14 @@ RESTful endpoints for the family chore management system.
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from uuid6 import uuid7
 
 from app.api.deps import ChoresServiceDep
 from app.api.models.chores import (
     AssignInstanceRequest,
     AssociationResponse,
+    BulkUpdateMasterStatusRequest,
     ChoreCategoryResponse,
     ChoreInstanceResponse,
     ChoresResponse,
@@ -180,6 +181,52 @@ async def get_all_chores(
     )
 
 
+@router.post("/sync", status_code=204)
+async def sync_chores(
+    chores_service: ChoresServiceDep,
+) -> None:
+    """Synchronize chore instance state.
+
+    Runs the safety net to generate missing instances, mark overdue
+    instances, and process expired instances. This is a write operation
+    that should be called explicitly by the frontend on mount/refresh.
+
+    Args:
+        chores_service: Injected chores service.
+    """
+    await chores_service.sync()
+
+
+@router.patch("/masters/bulk-status")
+async def bulk_update_master_status(
+    body: BulkUpdateMasterStatusRequest,
+    chores_service: ChoresServiceDep,
+) -> dict:
+    """Bulk update the status of multiple master chores.
+
+    Args:
+        body: Request body with master IDs and new status.
+        chores_service: Injected chores service dependency.
+
+    Returns:
+        Dict with updated count.
+
+    Raises:
+        HTTPException: If status is invalid.
+    """
+    try:
+        status_enum = MasterChoreStatus(body.status)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status: {body.status}. Must be one of: active, inactive, archived",
+        ) from e
+
+    updated_count = await chores_service.bulk_update_master_status(body.master_ids, status_enum)
+
+    return {"updated_count": updated_count}
+
+
 @router.post("/masters", response_model=MasterChoreResponse, status_code=201)
 async def create_master_chore(
     body: CreateMasterChoreRequest,
@@ -203,7 +250,11 @@ async def create_master_chore(
         estimated_minutes=body.estimated_minutes,
         due_time=body.due_time,
         due_date=body.due_date,
-        expiration_behavior=ExpirationBehavior(body.expiration_behavior),
+        expiration_behavior=(
+            ExpirationBehavior(body.expiration_behavior)
+            if body.expiration_behavior
+            else ExpirationBehavior.DISAPPEAR
+        ),
         end_date=body.end_date,
         max_occurrences=body.max_occurrences,
         conditions=body.conditions,
@@ -223,7 +274,7 @@ async def create_master_chore(
     return _master_to_response(created, category_map)
 
 
-@router.put("/masters/{chore_id}", response_model=MasterChoreResponse)
+@router.patch("/masters/{chore_id}", response_model=MasterChoreResponse)
 async def update_master_chore(
     chore_id: UUID,
     body: UpdateMasterChoreRequest,
@@ -295,38 +346,6 @@ async def delete_master_chore(
         chores_service: Injected chores service.
     """
     await chores_service.delete_master_chore(chore_id)
-
-
-@router.post("/masters/bulk-status")
-async def bulk_update_master_status(
-    chores_service: ChoresServiceDep,
-    master_ids: list[UUID] = Query(default=[]),
-    status: str = Query(...),
-) -> dict:
-    """Bulk update the status of multiple master chores.
-
-    Args:
-        master_ids: List of master chore IDs to update.
-        status: New status to apply (active, inactive, archived).
-        chores_service: Injected chores service dependency.
-
-    Returns:
-        Dict with updated count.
-
-    Raises:
-        HTTPException: If status is invalid.
-    """
-    try:
-        status_enum = MasterChoreStatus(status)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid status: {status}. Must be one of: active, inactive, archived",
-        ) from e
-
-    updated_count = await chores_service.bulk_update_master_status(master_ids, status_enum)
-
-    return {"updated_count": updated_count}
 
 
 @router.post("/associations", response_model=AssociationResponse, status_code=201)
@@ -441,7 +460,7 @@ async def assign_instance(
     return _instance_to_response(updated)
 
 
-@router.put("/instances/{instance_id}/status", response_model=ChoreInstanceResponse)
+@router.patch("/instances/{instance_id}/status", response_model=ChoreInstanceResponse)
 async def update_instance_status(
     instance_id: UUID,
     body: UpdateInstanceStatusRequest,

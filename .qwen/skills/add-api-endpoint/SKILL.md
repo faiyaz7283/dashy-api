@@ -113,12 +113,47 @@ make lint-api && make build-api && make test-api
 
 ## Conventions
 
-- **HTTP methods**: GET for reads, POST for creates, PUT for updates, DELETE for deletes
+### REST Compliance
+
+- **HTTP methods**: Use correct methods for their intended purpose
+  - `GET` — read-only operations, no side effects (cache writes acceptable)
+  - `POST` — create new resources
+  - `PATCH` — partial updates (most common for updates)
+  - `PUT` — full resource replacement (rarely used)
+  - `DELETE` — remove resources
 - **URL structure**: `/api/v1/<domain>` (plural nouns, no verbs)
+- **Route ordering**: Define fixed paths before parameterized paths (e.g., `/masters/bulk-status` before `/masters/{id}`)
+- **Request bodies**: Use request body for mutations, not query parameters
 - **Response models**: Always define explicit Pydantic models, don't return raw dicts
-- **Error handling**: Raise `DashyError` subclasses — they're rendered as RFC 9457 responses
+- **Error handling**: Raise `DashyError` subclasses or `HTTPException` — both are rendered as RFC 9457 responses
 - **Caching**: Use cache for any endpoint that calls external APIs (weather, calendar)
 - **Docstrings**: Google style for all functions and classes
+
+### Timezone Handling
+
+- **Timestamps** (created_at, updated_at, started_at, completed_at):
+  - Store and transmit in UTC
+  - Use `datetime.now(UTC)` for timestamp fields
+  - Database columns use `DateTime(timezone=True)`
+
+- **Date/time boundaries** (today, due_time, period calculations):
+  - Use configured timezone from `settings.tz`
+  - Use `datetime.now(settings.tz).date()` for "today"
+  - Use `datetime.now(settings.tz).strftime("%H:%M")` for time comparisons
+  - Ensures due times and period boundaries match user's local timezone
+
+**Example:**
+```python
+from app.config import settings
+from datetime import UTC, datetime
+
+# Correct: Use configured timezone for date boundaries
+today = datetime.now(settings.tz).date()
+current_time = datetime.now(settings.tz).strftime("%H:%M")
+
+# Correct: Use UTC for timestamps
+created_at = datetime.now(UTC)
+```
 
 ## Example: Adding a new endpoint to existing domain
 

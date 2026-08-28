@@ -340,8 +340,8 @@ async def test_assign_instance(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_update_instance_status(client: AsyncClient) -> None:
-    """Test PUT /api/v1/chores/instances/{id}/status."""
-    response = await client.put(
+    """Test PATCH /api/v1/chores/instances/{id}/status."""
+    response = await client.patch(
         f"/api/v1/chores/instances/{_INST_001}/status",
         json={
             "status": "in_progress",
@@ -357,7 +357,7 @@ async def test_update_instance_status(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_complete_instance(client: AsyncClient) -> None:
     """Test completing an instance."""
-    response = await client.put(
+    response = await client.patch(
         f"/api/v1/chores/instances/{_INST_001}/status",
         json={
             "status": "completed",
@@ -416,8 +416,8 @@ async def test_claim_nonexistent_instance_returns_404(client: AsyncClient) -> No
 
 @pytest.mark.asyncio
 async def test_update_master_chore(client: AsyncClient) -> None:
-    """Test PUT /api/v1/chores/masters/{id}."""
-    response = await client.put(
+    """Test PATCH /api/v1/chores/masters/{id}."""
+    response = await client.patch(
         f"/api/v1/chores/masters/{_MASTER_002}",
         json={
             "name": "Clean Bathroom Sink (Updated)",
@@ -433,7 +433,7 @@ async def test_update_master_chore(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_update_master_chore_status(client: AsyncClient) -> None:
     """Test updating master chore status."""
-    response = await client.put(
+    response = await client.patch(
         f"/api/v1/chores/masters/{_MASTER_001}",
         json={
             "status": "inactive",
@@ -447,7 +447,7 @@ async def test_update_master_chore_status(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_update_nonexistent_master_returns_404(client: AsyncClient) -> None:
     """Test updating a non-existent master returns 404."""
-    response = await client.put(
+    response = await client.patch(
         f"/api/v1/chores/masters/{uuid7()}",
         json={
             "name": "Updated Name",
@@ -458,9 +458,13 @@ async def test_update_nonexistent_master_returns_404(client: AsyncClient) -> Non
 
 @pytest.mark.asyncio
 async def test_bulk_update_master_status(client: AsyncClient) -> None:
-    """Test bulk updating master chore statuses via query params."""
-    response = await client.post(
-        f"/api/v1/chores/masters/bulk-status?master_ids={_MASTER_001}&master_ids={_MASTER_002}&status=inactive",
+    """Test bulk updating master chore statuses via PATCH."""
+    response = await client.patch(
+        "/api/v1/chores/masters/bulk-status",
+        json={
+            "master_ids": [str(_MASTER_001), str(_MASTER_002)],
+            "status": "inactive",
+        },
     )
     assert response.status_code == 200
     data = response.json()
@@ -473,17 +477,25 @@ async def test_bulk_update_master_status_invalid_returns_400(
     client: AsyncClient,
 ) -> None:
     """Test bulk update with invalid status returns 400."""
-    response = await client.post(
-        f"/api/v1/chores/masters/bulk-status?master_ids={_MASTER_001}&status=invalid_status",
+    response = await client.patch(
+        "/api/v1/chores/masters/bulk-status",
+        json={
+            "master_ids": [str(_MASTER_001)],
+            "status": "invalid_status",
+        },
     )
-    assert response.status_code == 400
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_bulk_update_master_status_empty_list(client: AsyncClient) -> None:
     """Test bulk update with empty master_ids list."""
-    response = await client.post(
-        "/api/v1/chores/masters/bulk-status?status=active",
+    response = await client.patch(
+        "/api/v1/chores/masters/bulk-status",
+        json={
+            "master_ids": [],
+            "status": "active",
+        },
     )
     assert response.status_code == 200
     data = response.json()

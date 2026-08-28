@@ -4,8 +4,9 @@ Evaluates JSON-based conditions against live weather and calendar data
 to determine whether conditional chore instances should be generated.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
+from app.config import settings
 from app.core.logging import get_logger
 from app.domain.calendar.models import DateRange
 from app.domain.calendar.ports import CalendarProvider
@@ -150,7 +151,7 @@ class ConditionEvaluator:
             return getattr(current, "wind_speed", None)
 
         if metric in ("snowfall", "rainfall") and forecast:
-            today_str = datetime.now(UTC).date().isoformat()
+            today_str = datetime.now(settings.tz).date().isoformat()
             for day in forecast:
                 if getattr(day, "date", None) == today_str:
                     field = "snow" if metric == "snowfall" else "rain"
@@ -171,7 +172,7 @@ class ConditionEvaluator:
             True if the calendar data satisfies the condition.
         """
         try:
-            now = datetime.now(UTC)
+            now = datetime.now(settings.tz)
             today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
             today_end = today_start + timedelta(hours=23, minutes=59, seconds=59)
             date_range = DateRange(start=today_start, end=today_end)

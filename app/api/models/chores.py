@@ -6,7 +6,9 @@ Pydantic models for chores API requests and responses.
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.domain.chores.models import ExpirationBehavior, InstanceStatus, MasterChoreStatus
 
 
 class ChoreCategoryResponse(BaseModel):
@@ -194,6 +196,19 @@ class CreateMasterChoreRequest(BaseModel):
     is_collaborative: bool = False
     created_by: str
 
+    @field_validator("expiration_behavior")
+    @classmethod
+    def validate_expiration_behavior(cls, v: str) -> str:
+        """Validate that expiration_behavior is a valid enum value."""
+        try:
+            ExpirationBehavior(v)
+        except ValueError:
+            valid_values = [e.value for e in ExpirationBehavior]
+            raise ValueError(
+                f"Invalid expiration_behavior: {v}. Must be one of: {', '.join(valid_values)}"
+            ) from None
+        return v
+
 
 class UpdateMasterChoreRequest(BaseModel):
     """Request body for updating a master chore.
@@ -232,6 +247,36 @@ class UpdateMasterChoreRequest(BaseModel):
     is_collaborative: bool | None = None
     status: str | None = None
 
+    @field_validator("expiration_behavior")
+    @classmethod
+    def validate_expiration_behavior(cls, v: str | None) -> str | None:
+        """Validate that expiration_behavior is a valid enum value."""
+        if v is None:
+            return v
+        try:
+            ExpirationBehavior(v)
+        except ValueError:
+            valid_values = [e.value for e in ExpirationBehavior]
+            raise ValueError(
+                f"Invalid expiration_behavior: {v}. Must be one of: {', '.join(valid_values)}"
+            ) from None
+        return v
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: str | None) -> str | None:
+        """Validate that status is a valid enum value."""
+        if v is None:
+            return v
+        try:
+            MasterChoreStatus(v)
+        except ValueError:
+            valid_values = [e.value for e in MasterChoreStatus]
+            raise ValueError(
+                f"Invalid status: {v}. Must be one of: {', '.join(valid_values)}"
+            ) from None
+        return v
+
 
 class CreateAssociationRequest(BaseModel):
     """Request body for creating a chore association.
@@ -247,6 +292,31 @@ class CreateAssociationRequest(BaseModel):
     member_id: str | None = None
     is_open_pool: bool = False
     created_by: str
+
+
+class BulkUpdateMasterStatusRequest(BaseModel):
+    """Request body for bulk updating master chore statuses.
+
+    Attributes:
+        master_ids: List of master chore IDs to update.
+        status: New status to apply (active, inactive, archived).
+    """
+
+    master_ids: list[UUID] = Field(default_factory=list)
+    status: str
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: str) -> str:
+        """Validate that status is a valid enum value."""
+        try:
+            MasterChoreStatus(v)
+        except ValueError:
+            valid_values = [e.value for e in MasterChoreStatus]
+            raise ValueError(
+                f"Invalid status: {v}. Must be one of: {', '.join(valid_values)}"
+            ) from None
+        return v
 
 
 class CreateCategoryRequest(BaseModel):
@@ -301,3 +371,16 @@ class UpdateInstanceStatusRequest(BaseModel):
 
     status: str
     actor_id: str
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: str) -> str:
+        """Validate that status is a valid enum value."""
+        try:
+            InstanceStatus(v)
+        except ValueError:
+            valid_values = [e.value for e in InstanceStatus]
+            raise ValueError(
+                f"Invalid status: {v}. Must be one of: {', '.join(valid_values)}"
+            ) from None
+        return v

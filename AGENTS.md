@@ -183,3 +183,45 @@ Never modify this setup order — it ensures complete isolation between dev and 
 ## 9. When in doubt
 
 If you are about to run a command and are unsure whether it violates the Docker-first rule, stop and ask the user. It is better to confirm than to pollute the working tree.
+
+### REST compliance requirements
+
+**HTTP methods must be used correctly:**
+- `GET` — read-only, no side effects (cache writes are acceptable)
+- `POST` — create new resources
+- `PATCH` — partial updates (most common for updates)
+- `PUT` — full resource replacement (rarely used)
+- `DELETE` — remove resources
+
+**Common violations to avoid:**
+- ❌ Using `PUT` for partial updates (use `PATCH`)
+- ❌ Using `POST` for updates (use `PATCH`)
+- ❌ Passing mutation data in query params (use request body)
+- ❌ Side effects in `GET` endpoints (move to explicit `POST /sync` endpoints)
+
+**Route ordering matters:** Fixed paths (e.g., `/masters/bulk-status`) must be defined before parameterized paths (e.g., `/masters/{id}`) to avoid route conflicts.
+
+### Timezone handling
+
+**Timestamps (created_at, updated_at, started_at, completed_at):**
+- Store and transmit in UTC
+- Use `datetime.now(UTC)` for timestamp fields
+- Database columns use `DateTime(timezone=True)`
+
+**Date/time boundaries (today, due_time, period calculations):**
+- Use configured timezone from `settings.tz`
+- Use `datetime.now(settings.tz).date()` for "today"
+- Use `datetime.now(settings.tz).strftime("%H:%M")` for time comparisons
+- This ensures due times and period boundaries match user's local timezone
+
+**Example:**
+```python
+from app.config import settings
+
+# Correct: Use configured timezone for date boundaries
+today = datetime.now(settings.tz).date()
+current_time = datetime.now(settings.tz).strftime("%H:%M")
+
+# Correct: Use UTC for timestamps
+created_at = datetime.now(UTC)
+```

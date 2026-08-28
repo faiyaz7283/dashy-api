@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from time import perf_counter
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -83,6 +84,97 @@ async def dashy_error_handler(request: Request, exc: DashyError) -> JSONResponse
         detail=exc.message,
     )
     return JSONResponse(status_code=exc.status_code, content=body)
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    """Render ``HTTPException`` as RFC 9457 Problem Details responses.
+
+    Ensures all HTTP errors use the same format as DashyError responses.
+
+    Args:
+        request: The incoming HTTP request.
+        exc: The caught HTTPException.
+
+    Returns:
+        A JSON response conforming to RFC 9457.
+    """
+    # Map common status codes to error codes
+    error_code_map = {
+        400: "bad-request",
+        401: "unauthorized",
+        403: "forbidden",
+        404: "not-found",
+        409: "conflict",
+        422: "unprocessable-entity",
+        500: "internal-error",
+        503: "service-unavailable",
+    }
+
+    error_code = error_code_map.get(exc.status_code, "http-error")
+    detail = exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+
+    body = {
+        "type": f"https://dashy.local/errors/{error_code}",
+        "title": error_code,
+        "status": exc.status_code,
+        "detail": detail,
+    }
+
+    logger.warning(
+        "http_error",
+        status_code=exc.status_code,
+        detail=detail,
+    )
+    return JSONResponse(status_code=exc.status_code, content=body)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Render ``RequestValidationError`` as RFC 9457 Problem Details responses.
+
+    Args:
+        request: The incoming HTTP request.
+        exc: The caught RequestValidationError.
+
+    Returns:
+        A JSON response conforming to RFC 9457.
+    """
+    # Convert errors to JSON-serializable format
+    errors = []
+    for error in exc.errors():
+        error_dict = {
+            "loc": error.get("loc", []),
+            "msg": error.get("msg", ""),
+            "type": error.get("type", ""),
+        }
+        # Only include ctx if it's JSON-serializable
+        if "ctx" in error:
+            try:
+                import json
+                json.dumps(error["ctx"])
+                error_dict["ctx"] = error["ctx"]
+            except (TypeError, ValueError):
+                error_dict["ctx"] = str(error["ctx"])
+        errors.append(error_dict)
+
+    logger.warning(
+        "validation_error",
+        status_code=422,
+        detail=str(errors),
+    )
+    return JSONResponse(
+        status_code=422,
+        content={
+            "type": "https://dashy.local/errors/validation-error",
+            "title": "validation-error",
+            "status": 422,
+            "detail": "Request validation failed",
+            "errors": errors,
+        },
+    )
 
 
 # Include routers under /api/v1

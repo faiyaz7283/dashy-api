@@ -10,6 +10,7 @@ from uuid import UUID
 
 from uuid6 import uuid7
 
+from app.config import settings
 from app.core.logging import get_logger
 from app.domain.chores.condition_evaluator import ConditionEvaluator
 from app.domain.chores.models import (
@@ -71,17 +72,16 @@ class ChoresService:
     async def get_all_data(self) -> dict:
         """Retrieve all chores data in a single call.
 
-        Runs the safety net (ensure_current_instances) before fetching
-        data, so the board always shows up-to-date instances.
-
         Returns categories, tags, master chores, associations,
         and instances for the frontend to render the chore board.
+
+        Note: This is a read-only operation. Call sync() separately
+        to run the safety net (generate missing instances, mark overdue,
+        process expirations).
 
         Returns:
             Dict with keys: categories, tags, master_chores, associations, instances.
         """
-        await self.ensure_current_instances()
-
         categories = await self.repository.get_categories()
         tags = await self.repository.get_tags()
         master_chores = await self.repository.get_master_chores()
@@ -94,6 +94,19 @@ class ChoresService:
             "associations": associations,
             "instances": instances,
         }
+
+    async def sync(self) -> None:
+        """Run the safety net to synchronize instance state.
+
+        Performs three operations:
+        1. Process expired instances (apply expiration behavior)
+        2. Mark overdue instances (due_time has passed)
+        3. Generate missing instances for all active associations
+
+        This is a write operation and should be called explicitly
+        by the frontend on mount/refresh, not automatically on GET.
+        """
+        await self.ensure_current_instances()
 
     async def get_categories(self) -> list[ChoreCategory]:
         """Retrieve all chore categories.
@@ -537,8 +550,8 @@ class ChoresService:
             return await self._generate_one_time_instance(association_id, master)
 
         rule = RecurrenceRule(**master.recurrence_rule)
-        today = datetime.now(UTC).date()
-        now_time = datetime.now(UTC).strftime("%H:%M")
+        today = datetime.now(settings.tz).date()
+        now_time = datetime.now(settings.tz).strftime("%H:%M")
 
         next_date = get_next_occurrence(rule, today, now_time)
 
@@ -634,7 +647,7 @@ class ChoresService:
             return None
 
         # Use due_date if set, otherwise use today
-        period_date = master.due_date if master.due_date else datetime.now(UTC).date()
+        period_date = master.due_date if master.due_date else datetime.now(settings.tz).date()
 
         # Check if instance already exists for this date
         existing = await self.repository.get_instance_for_period(
@@ -720,7 +733,7 @@ class ChoresService:
         Returns:
             List of processed ChoreInstance entities.
         """
-        today = datetime.now(UTC).date()
+        today = datetime.now(settings.tz).date()
         expired = await self.repository.get_expired_instances(today)
 
         if not expired:
@@ -812,7 +825,7 @@ class ChoresService:
         Returns:
             List of newly marked overdue ChoreInstance entities.
         """
-        now = datetime.now(UTC)
+        now = datetime.now(settings.tz)
         today = now.date()
         current_time = now.strftime("%H:%M")
 
