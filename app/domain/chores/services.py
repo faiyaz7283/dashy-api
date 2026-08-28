@@ -370,17 +370,26 @@ class ChoresService:
             member_id=member_id,
         )
 
-    async def create_association(self, association: ChoreAssociation) -> ChoreAssociation:
+    async def create_association(
+        self,
+        association: ChoreAssociation,
+        auto_claim: bool = False,
+        auto_assign: dict | None = None,
+    ) -> tuple[ChoreAssociation, ChoreInstance | None]:
         """Create a new association between a master chore and a member/pool.
 
         Validates collaborative constraints before creating, then generates
-        the first instance for the new association.
+        the first instance for the new association. Optionally auto-claims
+        or auto-assigns the generated instance.
 
         Args:
             association: ChoreAssociation entity to create.
+            auto_claim: If True, claim the generated instance for member_id.
+            auto_assign: If provided, assign the generated instance.
+                Must contain 'assigner_id' key.
 
         Returns:
-            The created association.
+            Tuple of (created association, generated instance or None).
 
         Raises:
             ValueError: If the master chore is not found or not active.
@@ -404,12 +413,23 @@ class ChoresService:
             master_chore_id=association.master_chore_id,
             member_id=association.member_id,
             is_open_pool=association.is_open_pool,
+            auto_claim=auto_claim,
+            auto_assign=bool(auto_assign),
         )
         created = await self.repository.create_association(association)
 
-        await self.generate_instance_for_association(created.id, master)
+        instance = await self.generate_instance_for_association(created.id, master)
 
-        return created
+        if instance and auto_claim and association.member_id:
+            instance = await self.claim_instance(instance.id, association.member_id)
+
+        if instance and auto_assign and association.member_id:
+            assigner_id = auto_assign["assigner_id"]
+            instance = await self.assign_instance(
+                instance.id, association.member_id, assigner_id
+            )
+
+        return created, instance
 
     async def delete_association(self, association_id: UUID) -> int:
         """Soft-delete an association and archive its active instances.

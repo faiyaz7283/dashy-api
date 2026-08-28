@@ -175,6 +175,7 @@ async def test_create_association(client: AsyncClient) -> None:
     assert data["master_chore_id"] == str(_MASTER_005)
     assert data["member_id"] == "arya"
     assert data["is_open_pool"] is False
+    assert "instance" in data  # New field in response
 
 
 @pytest.mark.asyncio
@@ -500,3 +501,103 @@ async def test_bulk_update_master_status_empty_list(client: AsyncClient) -> None
     assert response.status_code == 200
     data = response.json()
     assert data["updated_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_create_association_with_auto_claim(client: AsyncClient) -> None:
+    """Test POST /associations with auto_claim creates association + claims instance."""
+    response = await client.post(
+        "/api/v1/chores/associations",
+        json={
+            "master_chore_id": str(_MASTER_005),
+            "member_id": "arya",
+            "is_open_pool": False,
+            "created_by": "faiyaz",
+            "auto_claim": True,
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["master_chore_id"] == str(_MASTER_005)
+    assert data["member_id"] == "arya"
+    assert data["instance"] is not None
+    assert data["instance"]["claimed_by"] == "arya"
+    assert data["instance"]["assigned_to"] is None
+
+
+@pytest.mark.asyncio
+async def test_create_association_with_auto_assign(client: AsyncClient) -> None:
+    """Test POST /associations with auto_assign creates association + assigns instance."""
+    response = await client.post(
+        "/api/v1/chores/associations",
+        json={
+            "master_chore_id": str(_MASTER_005),
+            "member_id": "arya",
+            "is_open_pool": False,
+            "created_by": "faiyaz",
+            "auto_assign": {"assigner_id": "trisha"},
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["master_chore_id"] == str(_MASTER_005)
+    assert data["member_id"] == "arya"
+    assert data["instance"] is not None
+    assert data["instance"]["assigned_to"] == "arya"
+    assert data["instance"]["assigned_by"] == "trisha"
+    assert data["instance"]["claimed_by"] is None
+
+
+@pytest.mark.asyncio
+async def test_create_association_auto_claim_without_member_returns_422(
+    client: AsyncClient,
+) -> None:
+    """Test that auto_claim without member_id returns 422."""
+    response = await client.post(
+        "/api/v1/chores/associations",
+        json={
+            "master_chore_id": str(_MASTER_005),
+            "member_id": None,
+            "is_open_pool": True,
+            "created_by": "faiyaz",
+            "auto_claim": True,
+        },
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_association_auto_assign_without_member_returns_422(
+    client: AsyncClient,
+) -> None:
+    """Test that auto_assign without member_id returns 422."""
+    response = await client.post(
+        "/api/v1/chores/associations",
+        json={
+            "master_chore_id": str(_MASTER_005),
+            "member_id": None,
+            "is_open_pool": True,
+            "created_by": "faiyaz",
+            "auto_assign": {"assigner_id": "trisha"},
+        },
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_association_auto_claim_and_assign_mutually_exclusive(
+    client: AsyncClient,
+) -> None:
+    """Test that auto_claim and auto_assign together returns 422."""
+    response = await client.post(
+        "/api/v1/chores/associations",
+        json={
+            "master_chore_id": str(_MASTER_005),
+            "member_id": "arya",
+            "is_open_pool": False,
+            "created_by": "faiyaz",
+            "auto_claim": True,
+            "auto_assign": {"assigner_id": "trisha"},
+        },
+    )
+    assert response.status_code == 422

@@ -11,6 +11,7 @@ from uuid6 import uuid7
 from app.api.deps import ChoresServiceDep
 from app.api.models.chores import (
     AssignInstanceRequest,
+    AssociationCreateResponse,
     AssociationResponse,
     BulkUpdateMasterStatusRequest,
     ChoreCategoryResponse,
@@ -348,23 +349,26 @@ async def delete_master_chore(
     await chores_service.delete_master_chore(chore_id)
 
 
-@router.post("/associations", response_model=AssociationResponse, status_code=201)
+@router.post("/associations", response_model=AssociationCreateResponse, status_code=201)
 async def create_association(
     body: CreateAssociationRequest,
     chores_service: ChoresServiceDep,
-) -> AssociationResponse:
+) -> AssociationCreateResponse:
     """Create a new association between a master chore and a member/pool.
 
+    Optionally auto-claims or auto-assigns the generated instance.
+
     Args:
-        body: Association creation request.
+        body: Association creation request with optional auto_claim/auto_assign.
         chores_service: Injected chores service.
 
     Returns:
-        The newly created association.
+        The newly created association with the generated instance.
 
     Raises:
         HTTPException 404: Master chore not found or not active.
         HTTPException 409: Association violates collaborative constraints.
+        HTTPException 422: Validation error (e.g. auto_claim without member_id).
     """
     association = ChoreAssociation(
         id=uuid7(),
@@ -375,13 +379,27 @@ async def create_association(
     )
 
     try:
-        created = await chores_service.create_association(association)
+        created, instance = await chores_service.create_association(
+            association,
+            auto_claim=body.auto_claim,
+            auto_assign=body.auto_assign.model_dump() if body.auto_assign else None,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except AssociationConflictError as exc:
         raise HTTPException(status_code=409, detail=exc.message) from exc
 
-    return _association_to_response(created)
+    return AssociationCreateResponse(
+        id=created.id,
+        master_chore_id=created.master_chore_id,
+        member_id=created.member_id,
+        is_open_pool=created.is_open_pool,
+        created_by=created.created_by,
+        created_at=created.created_at,
+        updated_at=created.updated_at,
+        removed_at=created.removed_at,
+        instance=_instance_to_response(instance) if instance else None,
+    )
 
 
 @router.delete("/associations/{association_id}", status_code=204)

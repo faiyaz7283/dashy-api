@@ -330,7 +330,7 @@ class TestAssociationValidation:
             is_open_pool=False,
             created_by="faiyaz",
         )
-        result = await service.create_association(assoc2)
+        result, instance = await service.create_association(assoc2)
 
         assert result.id == assoc2_id
         assert result.member_id == "raya"
@@ -1178,3 +1178,143 @@ class TestOneTimeChoreGeneration:
         assert len(generated) >= 1
         instances_after = await service.get_instances(master_chore_id=once_master_id)
         assert len(instances_after) == 1
+
+
+class TestAssociationAutoClaimAssign:
+    """Tests for auto_claim and auto_assign on association creation."""
+
+    @pytest.mark.asyncio
+    async def test_create_association_with_auto_claim(
+        self, service: ChoresService
+    ) -> None:
+        """Test that auto_claim claims the generated instance."""
+        # Create a new master and association
+        claim_master_id = uuid7()
+        master = MasterChore(
+            id=claim_master_id,
+            name="Auto Claim Test",
+            category_id=_CAT_KITCHEN,
+            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            created_by="faiyaz",
+        )
+        await service.create_master_chore(master, tag_ids=[])
+
+        claim_assoc_id = uuid7()
+        association = ChoreAssociation(
+            id=claim_assoc_id,
+            master_chore_id=claim_master_id,
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+
+        created, instance = await service.create_association(
+            association, auto_claim=True
+        )
+
+        assert created.id == claim_assoc_id
+        assert instance is not None
+        assert instance.claimed_by == "arya"
+        assert instance.assigned_to is None
+        assert instance.assigned_by is None
+
+    @pytest.mark.asyncio
+    async def test_create_association_with_auto_assign(
+        self, service: ChoresService
+    ) -> None:
+        """Test that auto_assign assigns the generated instance."""
+        assign_master_id = uuid7()
+        master = MasterChore(
+            id=assign_master_id,
+            name="Auto Assign Test",
+            category_id=_CAT_KITCHEN,
+            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            created_by="faiyaz",
+        )
+        await service.create_master_chore(master, tag_ids=[])
+
+        assign_assoc_id = uuid7()
+        association = ChoreAssociation(
+            id=assign_assoc_id,
+            master_chore_id=assign_master_id,
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+
+        created, instance = await service.create_association(
+            association,
+            auto_assign={"assigner_id": "trisha"},
+        )
+
+        assert created.id == assign_assoc_id
+        assert instance is not None
+        assert instance.assigned_to == "arya"
+        assert instance.assigned_by == "trisha"
+        assert instance.claimed_by is None
+
+    @pytest.mark.asyncio
+    async def test_create_association_without_auto_flags(
+        self, service: ChoresService
+    ) -> None:
+        """Test backward compatibility: no auto flags returns instance as-is."""
+        backward_master_id = uuid7()
+        master = MasterChore(
+            id=backward_master_id,
+            name="Backward Compat Test",
+            category_id=_CAT_KITCHEN,
+            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            created_by="faiyaz",
+        )
+        await service.create_master_chore(master, tag_ids=[])
+
+        backward_assoc_id = uuid7()
+        association = ChoreAssociation(
+            id=backward_assoc_id,
+            master_chore_id=backward_master_id,
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+
+        created, instance = await service.create_association(association)
+
+        assert created.id == backward_assoc_id
+        assert instance is not None
+        # For member associations, instance is pre-populated with claimed_by/assigned_to
+        assert instance.claimed_by == "arya"
+        assert instance.assigned_to == "arya"
+
+    @pytest.mark.asyncio
+    async def test_create_association_auto_claim_open_pool_no_effect(
+        self, service: ChoresService
+    ) -> None:
+        """Test that auto_claim on open pool has no effect (no member_id)."""
+        pool_master_id = uuid7()
+        master = MasterChore(
+            id=pool_master_id,
+            name="Open Pool Auto Claim",
+            category_id=_CAT_KITCHEN,
+            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            created_by="faiyaz",
+        )
+        await service.create_master_chore(master, tag_ids=[])
+
+        pool_assoc_id = uuid7()
+        association = ChoreAssociation(
+            id=pool_assoc_id,
+            master_chore_id=pool_master_id,
+            member_id=None,
+            is_open_pool=True,
+            created_by="faiyaz",
+        )
+
+        # auto_claim=True but member_id=None — should not claim
+        created, instance = await service.create_association(
+            association, auto_claim=True
+        )
+
+        assert created.id == pool_assoc_id
+        assert instance is not None
+        assert instance.claimed_by is None
+        assert instance.assigned_to is None

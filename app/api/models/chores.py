@@ -6,7 +6,7 @@ Pydantic models for chores API requests and responses.
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.domain.chores.models import ExpirationBehavior, InstanceStatus, MasterChoreStatus
 
@@ -141,6 +141,35 @@ class AssociationResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     removed_at: datetime | None = None
+
+
+class AssociationCreateResponse(BaseModel):
+    """Response model for creating an association with optional auto-claim/assign.
+
+    Extends the base association response with the generated instance,
+    which is populated when auto_claim or auto_assign is used.
+
+    Attributes:
+        id: Unique identifier.
+        master_chore_id: Parent master chore ID.
+        member_id: Member ID (None for open pool).
+        is_open_pool: Whether this is an open pool.
+        created_by: Member ID who created this association.
+        created_at: ISO datetime of creation.
+        updated_at: ISO datetime of last update.
+        removed_at: ISO datetime of soft-delete (None if active).
+        instance: The generated instance (None if generation was skipped).
+    """
+
+    id: UUID
+    master_chore_id: UUID
+    member_id: str | None = None
+    is_open_pool: bool = False
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+    removed_at: datetime | None = None
+    instance: ChoreInstanceResponse | None = None
 
 
 class ChoresResponse(BaseModel):
@@ -278,6 +307,16 @@ class UpdateMasterChoreRequest(BaseModel):
         return v
 
 
+class AutoAssignConfig(BaseModel):
+    """Configuration for auto-assign on association creation.
+
+    Attributes:
+        assigner_id: Member ID making the assignment.
+    """
+
+    assigner_id: str
+
+
 class CreateAssociationRequest(BaseModel):
     """Request body for creating a chore association.
 
@@ -286,12 +325,27 @@ class CreateAssociationRequest(BaseModel):
         member_id: Member to associate (None for open pool).
         is_open_pool: Whether this is an open pool.
         created_by: Member ID creating the association.
+        auto_claim: If True, automatically claim the generated instance for member_id.
+        auto_assign: If provided, automatically assign the generated instance.
     """
 
     master_chore_id: UUID
     member_id: str | None = None
     is_open_pool: bool = False
     created_by: str
+    auto_claim: bool = False
+    auto_assign: AutoAssignConfig | None = None
+
+    @model_validator(mode="after")
+    def validate_auto_flags_require_member(self) -> "CreateAssociationRequest":
+        """Validate that auto_claim and auto_assign require member_id."""
+        if self.auto_claim and self.member_id is None:
+            raise ValueError("auto_claim requires member_id to be set")
+        if self.auto_assign is not None and self.member_id is None:
+            raise ValueError("auto_assign requires member_id to be set")
+        if self.auto_claim and self.auto_assign is not None:
+            raise ValueError("auto_claim and auto_assign are mutually exclusive")
+        return self
 
 
 class BulkUpdateMasterStatusRequest(BaseModel):
