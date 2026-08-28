@@ -184,7 +184,7 @@ async def test_create_open_pool_association(client: AsyncClient) -> None:
     response = await client.post(
         "/api/v1/chores/associations",
         json={
-            "master_chore_id": str(_MASTER_002),
+            "master_chore_id": str(_MASTER_005),
             "member_id": None,
             "is_open_pool": True,
             "created_by": "trisha",
@@ -192,7 +192,7 @@ async def test_create_open_pool_association(client: AsyncClient) -> None:
     )
     assert response.status_code == 201
     data = response.json()
-    assert data["master_chore_id"] == str(_MASTER_002)
+    assert data["master_chore_id"] == str(_MASTER_005)
     assert data["member_id"] is None
     assert data["is_open_pool"] is True
 
@@ -258,7 +258,7 @@ async def test_create_association_non_collaborative_conflict_returns_409(
     )
     assert response.status_code == 409
     data = response.json()
-    assert "already has an active member association" in data["detail"]
+    assert "already has an active association" in data["detail"]
 
 
 @pytest.mark.asyncio

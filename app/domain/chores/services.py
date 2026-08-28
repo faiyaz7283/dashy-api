@@ -236,10 +236,15 @@ class ChoresService:
 
         Raises:
             ValueError: If the instance is not found.
+            AssociationConflictError: If the member already has an association
+                for the same collaborative master chore.
         """
         instance = await self.repository.get_instance_by_id(instance_id)
         if not instance:
             raise ValueError(f"Instance '{instance_id}' not found")
+
+        # Validate: prevent double-assignment when claiming an open-pool instance
+        await self._validate_claim_assign(instance, member_id)
 
         updates: dict = {
             "claimed_by": member_id,
@@ -275,10 +280,15 @@ class ChoresService:
 
         Raises:
             ValueError: If the instance is not found.
+            AssociationConflictError: If the member already has an association
+                for the same collaborative master chore.
         """
         instance = await self.repository.get_instance_by_id(instance_id)
         if not instance:
             raise ValueError(f"Instance '{instance_id}' not found")
+
+        # Validate: prevent double-assignment when assigning an open-pool instance
+        await self._validate_claim_assign(instance, assignee_id)
 
         updates: dict = {
             "assigned_to": assignee_id,
@@ -294,6 +304,45 @@ class ChoresService:
         )
         return await self.repository.update_instance(instance_id, updates)
 
+    async def _validate_claim_assign(
+        self, instance: ChoreInstance, member_id: str
+    ) -> None:
+        """Validate claim/assign to prevent duplicate member associations.
+
+        When an open-pool instance is claimed or assigned to a member who
+        already has a member association on the same collaborative master,
+        raise AssociationConflictError.
+
+        Args:
+            instance: The instance being claimed/assigned.
+            member_id: The member claiming/being assigned.
+
+        Raises:
+            AssociationConflictError: If the member already has a member
+                association for the same collaborative master chore.
+        """
+        if not instance.association_id:
+            return
+
+        association = await self.repository.get_association(instance.association_id)
+        if not association or not association.is_open_pool:
+            return
+
+        master = await self.repository.get_master_chore_by_id(instance.master_chore_id)
+        if not master or not master.is_collaborative:
+            return
+
+        existing = await self.repository.get_associations_by_master(master.id)
+        member_assoc = [
+            a for a in existing
+            if not a.is_open_pool and a.member_id == member_id
+        ]
+        if member_assoc:
+            raise AssociationConflictError(
+                f"Member '{member_id}' already has an active association "
+                f"for collaborative master '{master.id}'"
+            )
+
     async def update_instance_status(
         self,
         instance_id: UUID,
@@ -304,7 +353,8 @@ class ChoresService:
 
         Any member can complete any instance — no approval or signoff required.
         When an instance is completed, triggers generation of the next instance
-        for the same association.
+        for the same association. If the master's expiration_behavior is
+        "disappear", the completed instance is archived immediately.
 
         Args:
             instance_id: Unique identifier for the instance.
@@ -345,7 +395,22 @@ class ChoresService:
         updated = await self.repository.update_instance(instance_id, updates)
 
         if new_status == InstanceStatus.COMPLETED and instance.association_id:
+            # Generate next instance for recurring chores
             await self.generate_instance_for_association(instance.association_id)
+
+            # Check if we should archive this completed instance
+            master = await self.repository.get_master_chore_by_id(
+                instance.master_chore_id
+            )
+            if (
+                master
+                and master.expiration_behavior == ExpirationBehavior.DISAPPEAR
+            ):
+                await self.repository.update_instance(
+                    instance_id, {"status": InstanceStatus.ARCHIVED}
+                )
+                # Return the archived instance
+                updated = await self.repository.get_instance_by_id(instance_id)
 
         return updated
 
@@ -406,6 +471,13 @@ class ChoresService:
 
         existing = await self.repository.get_associations_by_master(association.master_chore_id)
         self._validate_association(master, association, existing)
+
+        # Enforce max_occurrences limit
+        if master.max_occurrences and master.occurrence_count >= master.max_occurrences:
+            raise ValueError(
+                f"Master chore '{association.master_chore_id}' has reached its "
+                f"maximum of {master.max_occurrences} occurrences"
+            )
 
         logger.info(
             "create_association",
@@ -470,8 +542,8 @@ class ChoresService:
 
         Rules:
         - Open pool: only one per master (regardless of collaborative flag)
-        - Non-collaborative: only one non-open-pool association allowed
-        - Collaborative: multiple non-open-pool associations allowed
+        - Non-collaborative: only one association total (open pool or member)
+        - Collaborative: multiple member associations allowed, one open pool max
         - Duplicate member: same member can't have two active associations
           for the same master
 
@@ -489,6 +561,16 @@ class ChoresService:
                 raise AssociationConflictError(
                     f"Master '{master.id}' already has an open pool association"
                 )
+            # Non-collaborative: reject if any member association already exists
+            if not master.is_collaborative:
+                member_associations = [
+                    a for a in existing_associations if not a.is_open_pool
+                ]
+                if member_associations:
+                    raise AssociationConflictError(
+                        f"Non-collaborative master '{master.id}' already has a "
+                        f"member association"
+                    )
             return
 
         if not master.is_collaborative:
@@ -502,11 +584,11 @@ class ChoresService:
                     f"association for non-collaborative master '{master.id}'"
                 )
 
-            non_open_pool = [a for a in existing_associations if not a.is_open_pool]
-            if non_open_pool:
+            # Non-collaborative: reject if ANY association exists (open pool or member)
+            if existing_associations:
                 raise AssociationConflictError(
                     f"Non-collaborative master '{master.id}' already has an active "
-                    f"member association"
+                    f"association"
                 )
         else:
             duplicate = [

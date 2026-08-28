@@ -260,7 +260,7 @@ class TestAssociationValidation:
     async def test_create_association_non_collaborative_fails_if_exists(
         self, service: ChoresService
     ) -> None:
-        """Test that non-collaborative master rejects second member association."""
+        """Test that non-collaborative master rejects second association."""
         # _MASTER_001 already has _ASSOC_001 (arya)
         new_association = ChoreAssociation(
             id=uuid7(),
@@ -273,7 +273,7 @@ class TestAssociationValidation:
         with pytest.raises(AssociationConflictError) as exc_info:
             await service.create_association(new_association)
 
-        assert "already has an active member association" in str(exc_info.value)
+        assert "already has an active association" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_create_association_duplicate_member_fails(
@@ -391,6 +391,44 @@ class TestAssociationValidation:
             await service.create_association(new_open_pool)
 
         assert "already has an open pool association" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_non_collaborative_rejects_open_pool_if_member_exists(
+        self, service: ChoresService
+    ) -> None:
+        """Bug 5: Non-collaborative master with member association rejects open pool."""
+        # _MASTER_001 (non-collaborative) already has _ASSOC_001 (member "arya")
+        new_open_pool = ChoreAssociation(
+            id=uuid7(),
+            master_chore_id=_MASTER_001,
+            member_id=None,
+            is_open_pool=True,
+            created_by="faiyaz",
+        )
+
+        with pytest.raises(AssociationConflictError) as exc_info:
+            await service.create_association(new_open_pool)
+
+        assert "already has a member association" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_non_collaborative_rejects_member_if_open_pool_exists(
+        self, service: ChoresService
+    ) -> None:
+        """Bug 5: Non-collaborative master with open pool rejects member association."""
+        # _MASTER_003 (non-collaborative) already has _ASSOC_002 (open pool)
+        new_member_assoc = ChoreAssociation(
+            id=uuid7(),
+            master_chore_id=_MASTER_003,
+            member_id="arya",
+            is_open_pool=False,
+            created_by="faiyaz",
+        )
+
+        with pytest.raises(AssociationConflictError) as exc_info:
+            await service.create_association(new_member_assoc)
+
+        assert "already has an active association" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_create_association_master_not_found(self, service: ChoresService) -> None:
@@ -561,7 +599,7 @@ class TestInstanceGeneration:
     async def test_generate_instance_respects_max_occurrences(
         self, service: ChoresService
     ) -> None:
-        """Test that generation stops at max_occurrences."""
+        """Test that association creation is rejected at max_occurrences."""
         gen3_master_id = uuid7()
         master = MasterChore(
             id=gen3_master_id,
@@ -582,10 +620,9 @@ class TestInstanceGeneration:
             is_open_pool=False,
             created_by="faiyaz",
         )
-        await service.create_association(association)
-
-        # Try to generate — should return None because max_occurrences reached
-        await service.generate_instance_for_association(gen3_assoc_id)
+        # Should reject association creation when at max_occurrences
+        with pytest.raises(ValueError, match="maximum of 1 occurrences"):
+            await service.create_association(association)
 
         instances = await service.get_instances(master_chore_id=gen3_master_id)
         assert len(instances) == 0

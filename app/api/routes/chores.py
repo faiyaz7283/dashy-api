@@ -440,11 +440,14 @@ async def claim_instance(
 
     Raises:
         HTTPException 404: Instance not found.
+        HTTPException 422: Member already has an association for this master.
     """
     try:
         updated = await chores_service.claim_instance(instance_id, body.member_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AssociationConflictError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     return _instance_to_response(updated)
 
@@ -467,6 +470,7 @@ async def assign_instance(
 
     Raises:
         HTTPException 404: Instance not found.
+        HTTPException 422: Member already has an association for this master.
     """
     try:
         updated = await chores_service.assign_instance(
@@ -474,6 +478,8 @@ async def assign_instance(
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except AssociationConflictError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     return _instance_to_response(updated)
 
