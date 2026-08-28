@@ -92,25 +92,25 @@ class TestExpirationBehaviors:
         assert "inst-expired-disappear" not in instance_ids
 
     @pytest.mark.asyncio
-    async def test_carry_over_marks_missed_and_generates_next(
+    async def test_stay_visible_marks_missed_and_generates_next(
         self, service: ChoresService
     ) -> None:
-        """Test CARRY_OVER behavior marks instance as MISSED and generates next."""
-        # Create master with CARRY_OVER behavior
+        """Test STAY_VISIBLE marks MISSED; new instance from ensure_current_instances."""
+        # Create master with STAY_VISIBLE behavior
         master = MasterChore(
-            id="master-carryover",
-            name="Carry Over Test",
+            id="master-stayvisible-next",
+            name="Stay Visible Next Test",
             category_id="cat-kitchen",
             recurrence_rule={"frequency": "daily", "time": "18:00"},
-            expiration_behavior=ExpirationBehavior.CARRY_OVER,
+            expiration_behavior=ExpirationBehavior.STAY_VISIBLE,
             created_by="faiyaz",
         )
         await service.create_master_chore(master, tag_ids=[])
 
         # Create association
         association = ChoreAssociation(
-            id="assoc-carryover",
-            master_chore_id="master-carryover",
+            id="assoc-stayvisible-next",
+            master_chore_id="master-stayvisible-next",
             member_id="arya",
             is_open_pool=False,
             created_by="faiyaz",
@@ -120,9 +120,9 @@ class TestExpirationBehaviors:
         # Manually create an expired instance
         yesterday = datetime.now(UTC).date() - timedelta(days=1)
         expired_instance = ChoreInstance(
-            id="inst-expired-carryover",
-            master_chore_id="master-carryover",
-            association_id="assoc-carryover",
+            id="inst-expired-stayvisible-next",
+            master_chore_id="master-stayvisible-next",
+            association_id="assoc-stayvisible-next",
             period_start=yesterday,
             period_end=yesterday,
             status=InstanceStatus.ACTIVE,
@@ -136,17 +136,18 @@ class TestExpirationBehaviors:
 
         # Verify our test instance was processed
         processed_ids = [i.id for i in processed]
-        assert "inst-expired-carryover" in processed_ids
+        assert "inst-expired-stayvisible-next" in processed_ids
 
         # Verify instance was marked as MISSED
-        updated_instance = await service.repository.get_instance_by_id("inst-expired-carryover")
+        updated_instance = await service.repository.get_instance_by_id(
+            "inst-expired-stayvisible-next"
+        )
         assert updated_instance is not None
         assert updated_instance.status == InstanceStatus.MISSED
 
-        # Verify a new instance was generated for the next period
-        all_instances = await service.get_instances(master_chore_id="master-carryover")
-        active_instances = [i for i in all_instances if i.status == InstanceStatus.ACTIVE]
-        assert len(active_instances) >= 1
+        # Verify a new instance was generated for the next period (by ensure_current_instances)
+        generated = await service.ensure_current_instances()
+        assert len(generated) >= 1
 
     @pytest.mark.asyncio
     async def test_stay_visible_marks_missed_but_keeps_visible(
@@ -324,13 +325,13 @@ class TestSafetyNetIntegration:
         self, service: ChoresService
     ) -> None:
         """Test that safety net processes expiration before generating instances."""
-        # Create master with CARRY_OVER behavior
+        # Create master with STAY_VISIBLE behavior
         master = MasterChore(
             id="master-safetynet",
             name="Safety Net Test",
             category_id="cat-kitchen",
             recurrence_rule={"frequency": "daily", "time": "18:00"},
-            expiration_behavior=ExpirationBehavior.CARRY_OVER,
+            expiration_behavior=ExpirationBehavior.STAY_VISIBLE,
             created_by="faiyaz",
         )
         await service.create_master_chore(master, tag_ids=[])
@@ -381,7 +382,7 @@ class TestSafetyNetIntegration:
             name="No Expired Test",
             category_id="cat-kitchen",
             recurrence_rule={"frequency": "daily", "time": "18:00"},
-            expiration_behavior=ExpirationBehavior.CARRY_OVER,
+            expiration_behavior=ExpirationBehavior.STAY_VISIBLE,
             created_by="faiyaz",
         )
         await service.create_master_chore(master, tag_ids=[])

@@ -210,6 +210,17 @@ class ChoresService:
         logger.info("delete_master_chore", chore_id=chore_id)
         await self.repository.delete_master_chore(chore_id)
 
+    async def permanent_delete_master_chore(self, chore_id: UUID) -> None:
+        """Hard-delete a master chore and all related data.
+
+        Cascade deletes: instances → associations → tag links → master.
+
+        Args:
+            chore_id: Unique identifier for the master chore.
+        """
+        logger.info("permanent_delete_master_chore", chore_id=chore_id)
+        await self.repository.permanent_delete_master_chore(chore_id)
+
     async def get_instances(self, master_chore_id: UUID | None = None) -> list[ChoreInstance]:
         """Retrieve chore instances.
 
@@ -342,6 +353,130 @@ class ChoresService:
                 f"Member '{member_id}' already has an active association "
                 f"for collaborative master '{master.id}'"
             )
+
+    async def delete_instance(self, instance_id: UUID) -> ChoreInstance:
+        """Delete a chore instance (soft-delete by archiving).
+
+        Only instances with status ACTIVE or ARCHIVED can be deleted.
+        Instances with status IN_PROGRESS, COMPLETED, MISSED, or OVERDUE
+        cannot be deleted — they must be resolved first.
+
+        Args:
+            instance_id: Unique identifier for the instance.
+
+        Returns:
+            The archived instance.
+
+        Raises:
+            ValueError: If the instance is not found or cannot be deleted.
+        """
+        instance = await self.repository.get_instance_by_id(instance_id)
+        if not instance:
+            raise ValueError(f"Instance '{instance_id}' not found")
+
+        if instance.status not in (InstanceStatus.ACTIVE, InstanceStatus.ARCHIVED):
+            raise ValueError(
+                f"Cannot delete instance with status '{instance.status.value}'. "
+                f"Only active or archived instances can be deleted."
+            )
+
+        now = datetime.now(UTC)
+        await self.repository.update_instance(
+            instance_id,
+            {
+                "status": InstanceStatus.ARCHIVED,
+                "updated_at": now,
+            },
+        )
+
+        updated = await self.repository.get_instance_by_id(instance_id)
+        if not updated:
+            raise ValueError(f"Instance '{instance_id}' not found after update")
+        return updated
+
+    async def revert_instance_status(self, instance_id: UUID) -> ChoreInstance:
+        """Revert an instance's status by one step.
+
+        Status reversal flow:
+        - completed → in_progress (clears completed_at, completed_by)
+        - in_progress → active (clears started_at)
+        - missed → active
+        - overdue → active
+
+        Instances with status ACTIVE or ARCHIVED cannot be reverted.
+
+        Args:
+            instance_id: Unique identifier for the instance.
+
+        Returns:
+            The updated instance.
+
+        Raises:
+            ValueError: If the instance is not found or cannot be reverted.
+        """
+        instance = await self.repository.get_instance_by_id(instance_id)
+        if not instance:
+            raise ValueError(f"Instance '{instance_id}' not found")
+
+        now = datetime.now(UTC)
+        updates: dict = {"updated_at": now}
+
+        if instance.status == InstanceStatus.COMPLETED:
+            updates["status"] = InstanceStatus.IN_PROGRESS
+            updates["completed_at"] = None
+            updates["completed_by"] = None
+        elif instance.status == InstanceStatus.IN_PROGRESS:
+            updates["status"] = InstanceStatus.ACTIVE
+            updates["started_at"] = None
+        elif instance.status in (InstanceStatus.MISSED, InstanceStatus.OVERDUE):
+            updates["status"] = InstanceStatus.ACTIVE
+        else:
+            raise ValueError(
+                f"Cannot revert instance with status '{instance.status.value}'. "
+                f"Only completed, in_progress, missed, or overdue instances can be reverted."
+            )
+
+        await self.repository.update_instance(instance_id, updates)
+
+        updated = await self.repository.get_instance_by_id(instance_id)
+        if not updated:
+            raise ValueError(f"Instance '{instance_id}' not found after update")
+        return updated
+
+    async def reset_instance(self, instance_id: UUID) -> ChoreInstance:
+        """Reset an instance to active status regardless of current status.
+
+        Clears all progress tracking fields (started_at, completed_at, completed_by).
+
+        Args:
+            instance_id: Unique identifier for the instance.
+
+        Returns:
+            The reset instance.
+
+        Raises:
+            ValueError: If the instance is not found.
+        """
+        instance = await self.repository.get_instance_by_id(instance_id)
+        if not instance:
+            raise ValueError(f"Instance '{instance_id}' not found")
+
+        now = datetime.now(UTC)
+        await self.repository.update_instance(
+            instance_id,
+            {
+                "status": InstanceStatus.ACTIVE,
+                "started_at": None,
+                "completed_at": None,
+                "completed_by": None,
+                "updated_at": now,
+            },
+        )
+
+        updated = await self.repository.get_instance_by_id(instance_id)
+        if not updated:
+            raise ValueError(f"Instance '{instance_id}' not found after update")
+        return updated
 
     async def update_instance_status(
         self,
@@ -828,7 +963,6 @@ class ChoresService:
 
         Applies the master's expiration_behavior to each expired instance:
         - DISAPPEAR: Delete the instance
-        - CARRY_OVER: Mark as MISSED, generate new instance for next period
         - STAY_VISIBLE: Mark as MISSED, leave instance visible
         - CONVERT_TO_OPEN: Clear assignment, move to open pool
 
@@ -859,22 +993,6 @@ class ChoresService:
                 await self.repository.delete_instance(instance.id)
                 logger.info(
                     "process_expired_disappear",
-                    instance_id=instance.id,
-                    master_id=master_id,
-                )
-
-            elif behavior == ExpirationBehavior.CARRY_OVER:
-                await self.repository.update_instance(
-                    instance.id,
-                    {
-                        "status": InstanceStatus.MISSED,
-                        "updated_at": datetime.now(UTC),
-                    },
-                )
-                if instance.association_id:
-                    await self.generate_instance_for_association(instance.association_id, master)
-                logger.info(
-                    "process_expired_carry_over",
                     instance_id=instance.id,
                     master_id=master_id,
                 )
@@ -967,8 +1085,12 @@ class ChoresService:
     ) -> int:
         """Update the status of multiple master chores at once.
 
-        Used for bulk pause/resume operations. Updates status and
+        Used for bulk pause/resume/archive operations. Updates status and
         updated_at timestamp for all specified masters.
+
+        When archiving, enforces safety checks:
+        - Blocks if any instance has status ACTIVE or IN_PROGRESS
+        - Cascade-archives instances with status COMPLETED or MISSED
 
         Args:
             master_ids: List of master chore IDs to update.
@@ -976,9 +1098,38 @@ class ChoresService:
 
         Returns:
             Number of masters actually updated.
+
+        Raises:
+            ValueError: If archiving is blocked due to active/in_progress instances.
         """
         if not master_ids:
             return 0
+
+        # Safety check when archiving
+        if status == MasterChoreStatus.ARCHIVED:
+            for master_id in master_ids:
+                instances = await self.repository.get_instances(master_chore_id=master_id)
+                active_instances = [
+                    i for i in instances
+                    if i.status in (InstanceStatus.ACTIVE, InstanceStatus.IN_PROGRESS)
+                ]
+                if active_instances:
+                    raise ValueError(
+                        f"Cannot archive master '{master_id}': "
+                        f"{len(active_instances)} active/in-progress instance(s) must be "
+                        f"completed or deleted first."
+                    )
+
+                # Cascade-archive completed/missed instances
+                for instance in instances:
+                    if instance.status in (InstanceStatus.COMPLETED, InstanceStatus.MISSED):
+                        await self.repository.update_instance(
+                            instance.id,
+                            {
+                                "status": InstanceStatus.ARCHIVED,
+                                "updated_at": datetime.now(UTC),
+                            },
+                        )
 
         updated_count = await self.repository.bulk_update_master_status(
             master_ids, status

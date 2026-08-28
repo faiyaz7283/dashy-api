@@ -5,7 +5,7 @@ RESTful endpoints for the family chore management system.
 
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from uuid6 import uuid7
 
 from app.api.deps import ChoresServiceDep
@@ -339,14 +339,25 @@ async def update_master_chore(
 async def delete_master_chore(
     chore_id: UUID,
     chores_service: ChoresServiceDep,
+    permanent: bool = Query(
+        False,
+        description="Hard delete with cascade (master + associations + instances)",
+    ),
 ) -> None:
-    """Soft-delete (archive) a master chore.
+    """Delete a master chore.
+
+    By default performs a soft-delete (archive). Pass ``?permanent=true``
+    to hard-delete the master, its associations, and all instances.
 
     Args:
         chore_id: Master chore identifier.
+        permanent: If True, permanently delete with cascade.
         chores_service: Injected chores service.
     """
-    await chores_service.delete_master_chore(chore_id)
+    if permanent:
+        await chores_service.permanent_delete_master_chore(chore_id)
+    else:
+        await chores_service.delete_master_chore(chore_id)
 
 
 @router.post("/associations", response_model=AssociationCreateResponse, status_code=201)
@@ -516,6 +527,101 @@ async def update_instance_status(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return _instance_to_response(updated)
+
+
+@router.delete("/instances/{instance_id}", response_model=ChoreInstanceResponse)
+async def delete_instance(
+    instance_id: UUID,
+    chores_service: ChoresServiceDep,
+) -> ChoreInstanceResponse:
+    """Delete (archive) a chore instance.
+
+    Only instances with status ACTIVE or ARCHIVED can be deleted.
+    Instances with status IN_PROGRESS, COMPLETED, MISSED, or OVERDUE
+    cannot be deleted — they must be resolved first.
+
+    Args:
+        instance_id: Instance identifier.
+        chores_service: Injected chores service.
+
+    Returns:
+        The archived instance.
+
+    Raises:
+        HTTPException 404: Instance not found.
+        HTTPException 400: Instance cannot be deleted.
+    """
+    try:
+        archived = await chores_service.delete_instance(instance_id)
+    except ValueError as exc:
+        if "not found" in str(exc):
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return _instance_to_response(archived)
+
+
+@router.post("/instances/{instance_id}/revert", response_model=ChoreInstanceResponse)
+async def revert_instance_status(
+    instance_id: UUID,
+    chores_service: ChoresServiceDep,
+) -> ChoreInstanceResponse:
+    """Revert an instance's status by one step.
+
+    Status reversal flow:
+    - completed → in_progress (clears completed_at, completed_by)
+    - in_progress → active (clears started_at)
+    - missed → active
+    - overdue → active
+
+    Args:
+        instance_id: Instance identifier.
+        chores_service: Injected chores service.
+
+    Returns:
+        The updated instance.
+
+    Raises:
+        HTTPException 404: Instance not found.
+        HTTPException 400: Instance cannot be reverted.
+    """
+    try:
+        reverted = await chores_service.revert_instance_status(instance_id)
+    except ValueError as exc:
+        if "not found" in str(exc):
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return _instance_to_response(reverted)
+
+
+@router.post("/instances/{instance_id}/reset", response_model=ChoreInstanceResponse)
+async def reset_instance(
+    instance_id: UUID,
+    chores_service: ChoresServiceDep,
+) -> ChoreInstanceResponse:
+    """Reset an instance to active status regardless of current status.
+
+    Clears all progress tracking fields (started_at, completed_at, completed_by).
+
+    Args:
+        instance_id: Instance identifier.
+        chores_service: Injected chores service.
+
+    Returns:
+        The reset instance.
+
+    Raises:
+        HTTPException 404: Instance not found.
+    """
+    try:
+        reset = await chores_service.reset_instance(instance_id)
+    except ValueError as exc:
+        if "not found" in str(exc):
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return _instance_to_response(reset)
 
 
 @router.post("/categories", response_model=ChoreCategoryResponse, status_code=201)

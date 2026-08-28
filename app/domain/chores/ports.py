@@ -116,6 +116,14 @@ class ChoresRepository(Protocol):
         """
         ...
 
+    async def permanent_delete_master_chore(self, chore_id: UUID) -> None:
+        """Hard-delete a master chore and all related associations and instances.
+
+        Args:
+            chore_id: Unique identifier for the master chore.
+        """
+        ...
+
     async def get_instances(self, master_chore_id: UUID | None = None) -> list[ChoreInstance]:
         """Retrieve chore instances, optionally filtered by master chore.
 

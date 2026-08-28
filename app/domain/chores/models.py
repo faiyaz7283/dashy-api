@@ -15,13 +15,11 @@ class ExpirationBehavior(StrEnum):
 
     Attributes:
         DISAPPEAR: Instance is removed entirely.
-        CARRY_OVER: A new instance is generated for the next period.
         STAY_VISIBLE: Instance remains, marked as missed.
         CONVERT_TO_OPEN: Instance moves to the open pool for anyone to claim.
     """
 
     DISAPPEAR = "disappear"
-    CARRY_OVER = "carry_over"
     STAY_VISIBLE = "stay_visible"
     CONVERT_TO_OPEN = "convert_to_open"
 

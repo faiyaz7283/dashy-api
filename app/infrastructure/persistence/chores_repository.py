@@ -226,6 +226,47 @@ class ChoresRepositoryImpl:
             self.session.add(db_master)
             await self.session.commit()
 
+    async def permanent_delete_master_chore(self, chore_id: UUID) -> None:
+        """Hard-delete a master chore and all related data.
+
+        Cascade order: instances → associations → tag links → master.
+
+        Args:
+            chore_id: Unique identifier for the master chore.
+        """
+        # 1. Delete all instances for associations of this master
+        assoc_statement = select(ChoreAssociationDB.id).where(
+            ChoreAssociationDB.master_chore_id == chore_id
+        )
+        assoc_result = await self.session.execute(assoc_statement)
+        association_ids = [row[0] for row in assoc_result.all()]
+
+        if association_ids:
+            from sqlmodel import delete as sqlmodel_delete
+
+            inst_del = sqlmodel_delete(ChoreInstanceDB).where(
+                ChoreInstanceDB.association_id.in_(association_ids)
+            )
+            await self.session.execute(inst_del)
+
+        # 2. Delete all associations for this master
+        assoc_del = sqlmodel_delete(ChoreAssociationDB).where(
+            ChoreAssociationDB.master_chore_id == chore_id
+        )
+        await self.session.execute(assoc_del)
+
+        # 3. Delete tag links for this master
+        tag_del = sqlmodel_delete(ChoreTagLinkDB).where(
+            ChoreTagLinkDB.master_chore_id == chore_id
+        )
+        await self.session.execute(tag_del)
+
+        # 4. Delete the master itself
+        master_del = sqlmodel_delete(MasterChoreDB).where(MasterChoreDB.id == chore_id)
+        await self.session.execute(master_del)
+
+        await self.session.commit()
+
     async def bulk_update_master_status(
         self, master_ids: list[UUID], status: MasterChoreStatus
     ) -> int:

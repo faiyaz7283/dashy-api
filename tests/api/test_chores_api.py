@@ -116,7 +116,7 @@ async def test_create_master_chore(client: AsyncClient) -> None:
             "difficulty": 2,
             "recurrence_rule": {"frequency": "daily", "time": "18:00"},
             "estimated_minutes": 10,
-            "expiration_behavior": "carry_over",
+            "expiration_behavior": "stay_visible",
             "created_by": "faiyaz",
         },
     )

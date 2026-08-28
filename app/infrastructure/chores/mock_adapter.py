@@ -88,7 +88,7 @@ _MASTER_1 = MasterChore(
     difficulty=1,
     recurrence_rule={"frequency": "daily", "time": "18:00"},
     estimated_minutes=5,
-    expiration_behavior=ExpirationBehavior.CARRY_OVER,
+    expiration_behavior=ExpirationBehavior.STAY_VISIBLE,
     created_by="faiyaz",
     status=MasterChoreStatus.ACTIVE,
     created_at=_NOW - timedelta(days=14),
@@ -103,7 +103,7 @@ _MASTER_2 = MasterChore(
     difficulty=2,
     recurrence_rule={"frequency": "daily", "time": "20:00"},
     estimated_minutes=10,
-    expiration_behavior=ExpirationBehavior.CARRY_OVER,
+    expiration_behavior=ExpirationBehavior.STAY_VISIBLE,
     created_by="trisha",
     status=MasterChoreStatus.ACTIVE,
     created_at=_NOW - timedelta(days=14),
@@ -133,7 +133,7 @@ _MASTER_4 = MasterChore(
     difficulty=2,
     recurrence_rule={"frequency": "weekly", "day_of_week": 6, "time": "14:00"},
     estimated_minutes=20,
-    expiration_behavior=ExpirationBehavior.CARRY_OVER,
+    expiration_behavior=ExpirationBehavior.STAY_VISIBLE,
     created_by="trisha",
     status=MasterChoreStatus.ACTIVE,
     created_at=_NOW - timedelta(days=7),
@@ -163,7 +163,7 @@ _MASTER_6 = MasterChore(
     difficulty=1,
     recurrence_rule={"frequency": "daily", "time": "19:00"},
     estimated_minutes=5,
-    expiration_behavior=ExpirationBehavior.CARRY_OVER,
+    expiration_behavior=ExpirationBehavior.STAY_VISIBLE,
     created_by="faiyaz",
     status=MasterChoreStatus.ACTIVE,
     created_at=_NOW - timedelta(days=14),
@@ -484,6 +484,24 @@ class MockChoresRepository:
                 master.deleted_at = datetime.now(UTC)
                 master.status = MasterChoreStatus.ARCHIVED
                 return
+
+    async def permanent_delete_master_chore(self, chore_id: UUID) -> None:
+        """Hard-delete a mock master chore and all related data.
+
+        Args:
+            chore_id: Unique identifier for the master chore.
+        """
+        # Find association IDs for this master
+        assoc_ids = [a.id for a in self._associations if a.master_chore_id == chore_id]
+
+        # Delete instances belonging to those associations
+        self._instances = [i for i in self._instances if i.association_id not in assoc_ids]
+
+        # Delete associations for this master
+        self._associations = [a for a in self._associations if a.master_chore_id != chore_id]
+
+        # Delete the master itself
+        self._masters = [m for m in self._masters if m.id != chore_id]
 
     async def get_instances(self, master_chore_id: UUID | None = None) -> list[ChoreInstance]:
         """Return mock chore instances.
