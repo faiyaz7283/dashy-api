@@ -7,7 +7,6 @@ import pytest
 from googleapiclient.errors import HttpError
 
 from app.core.exceptions import UpstreamServiceError
-from app.domain.calendar.models import DateRange
 from app.infrastructure.calendar.google_adapter import GoogleCalendarAdapter
 from app.infrastructure.weather.owm_adapter import OWMWeatherAdapter
 

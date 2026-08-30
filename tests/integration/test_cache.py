@@ -122,6 +122,7 @@ class TestCacheIntegration:
         cache = AsyncMock(spec=Cache)
         cache.get = AsyncMock()
         cache.set = AsyncMock()
+        cache.fetch = AsyncMock()
         cache.get_stats = MagicMock()
         cache.get_stats.return_value.hits = 0
         cache.get_stats.return_value.misses = 0
@@ -130,9 +131,9 @@ class TestCacheIntegration:
         return cache
 
     async def test_weather_route_uses_cache(self, mock_cache):
-        """Test weather route checks cache before fetching."""
+        """Test weather route uses cache.fetch() for SWR pattern."""
         # Provide a complete valid WeatherResponse structure
-        mock_cache.get.return_value = {
+        mock_cache.fetch.return_value = {
             "current": {
                 "temperature": 72,
                 "feels_like": 75,
@@ -160,13 +161,13 @@ class TestCacheIntegration:
                 response = await client.get("/api/v1/weather")
 
                 assert response.status_code == 200
-                mock_cache.get.assert_called_once()
+                mock_cache.fetch.assert_called_once()
         finally:
             app.dependency_overrides.clear()
 
     async def test_calendar_route_uses_cache(self, mock_cache):
-        """Test calendar route checks cache before fetching."""
-        mock_cache.get.return_value = {
+        """Test calendar route uses cache.fetch() for SWR pattern."""
+        mock_cache.fetch.return_value = {
             "events": [],
             "week_start": "2026-01-01",
             "week_end": "2026-01-07",
@@ -183,14 +184,12 @@ class TestCacheIntegration:
                 response = await client.get("/api/v1/calendar")
 
                 assert response.status_code == 200
-                mock_cache.get.assert_called_once()
+                mock_cache.fetch.assert_called_once()
         finally:
             app.dependency_overrides.clear()
 
     async def test_weather_route_caches_result(self, mock_cache):
-        """Test weather route caches API result."""
-        mock_cache.get.return_value = None  # Cache miss
-
+        """Test weather route uses cache.fetch() which handles caching internally."""
         # Create a proper WeatherResponse object
         from app.api.models.weather import WeatherCurrent, WeatherResponse
 
@@ -208,6 +207,9 @@ class TestCacheIntegration:
             forecast=[],
         )
 
+        # Mock cache.fetch to return the dumped response
+        mock_cache.fetch.return_value = mock_weather_response.model_dump()
+
         # Create a mock weather provider that returns valid data
         mock_weather_provider = AsyncMock()
         mock_weather_provider.get_weather.return_value = mock_weather_response
@@ -224,13 +226,18 @@ class TestCacheIntegration:
                 response = await client.get("/api/v1/weather")
 
                 assert response.status_code == 200
-                mock_cache.set.assert_called_once()
+                # cache.fetch is called (it handles caching internally)
+                mock_cache.fetch.assert_called_once()
         finally:
             app.dependency_overrides.clear()
 
     async def test_calendar_route_caches_result(self, mock_cache):
-        """Test calendar route caches API result."""
-        mock_cache.get.return_value = None  # Cache miss
+        """Test calendar route uses cache.fetch() which handles caching internally."""
+        mock_cache.fetch.return_value = {
+            "events": [],
+            "week_start": "2026-01-01",
+            "week_end": "2026-01-07",
+        }
 
         # Override the dependency
         from app.api.deps import get_redis_cache
@@ -243,7 +250,8 @@ class TestCacheIntegration:
                 response = await client.get("/api/v1/calendar")
 
                 assert response.status_code == 200
-                mock_cache.set.assert_called_once()
+                # cache.fetch is called (it handles caching internally)
+                mock_cache.fetch.assert_called_once()
         finally:
             app.dependency_overrides.clear()
 

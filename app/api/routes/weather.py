@@ -3,14 +3,23 @@
 Provides endpoints for fetching current weather and forecast data.
 """
 
+import httpx
 from fastapi import APIRouter, Depends
 
 from app.api.deps import CacheDep, WeatherProviderDep
 from app.api.models.requests import WeatherQuery
 from app.api.models.weather import WeatherResponse
 from app.config import settings
+from app.core.cache import RetryConfig
 
 router = APIRouter(prefix="/weather", tags=["weather"])
+
+# Retry config for weather API calls
+WEATHER_RETRY_CONFIG = RetryConfig(
+    max_attempts=3,
+    backoff_seconds=[1.0, 2.0, 4.0],
+    transient_errors=(httpx.HTTPError, ConnectionError, TimeoutError, OSError),
+)
 
 
 @router.get("", response_model=WeatherResponse)
@@ -21,8 +30,8 @@ async def get_weather_endpoint(
 ) -> WeatherResponse:
     """Get current weather and 19-day forecast.
 
-    Fetches from weather provider (OpenWeatherMap or mock).
-    Results are cached for the configured TTL.
+    Uses stale-while-revalidate pattern: fresh cache → stale cache → fetch with retry.
+    On success, caches result with both fresh and stale TTLs.
 
     Args:
         weather_provider: Injected weather provider instance.
@@ -31,16 +40,24 @@ async def get_weather_endpoint(
 
     Returns:
         WeatherResponse with current conditions and forecast.
+
+    Raises:
+        UpstreamServiceError: When all retries fail and no stale cache exists.
     """
     cache_key = f"weather:{query.units}"
 
-    # Try cache first
-    cached = await cache.get(cache_key)
-    if cached is not None:
-        return WeatherResponse(**cached)
+    async def fetch_weather() -> dict:
+        """Fetch fresh weather data from provider."""
+        result = await weather_provider.get_weather(query.units)
+        return result.model_dump()
 
-    # Fetch from provider (providers handle their own fallback internally)
-    result = await weather_provider.get_weather(query.units)
-    # Cache the result
-    await cache.set(cache_key, result.model_dump(), settings.WEATHER_CACHE_TTL)
-    return result
+    cached_data = await cache.fetch(
+        key=cache_key,
+        fetcher=fetch_weather,
+        fresh_ttl=settings.WEATHER_CACHE_TTL,
+        stale_ttl=settings.WEATHER_STALE_TTL,
+        retry_config=WEATHER_RETRY_CONFIG,
+        service_name="openweathermap",
+    )
+
+    return WeatherResponse(**cached_data)
