@@ -39,14 +39,24 @@ def calculate_period(
         return (reference_date, reference_date)
 
     if rule.frequency == "weekly":
-        target_weekday = rule.day_of_week
+        # day_of_week is now a list; find the next occurrence of any target day
+        target_weekdays = rule.day_of_week or []
         current_weekday = reference_date.weekday()
-        days_diff = target_weekday - current_weekday
 
-        if days_diff < 0:
-            days_diff += 7
+        # Find the minimum days to add to reach any target weekday
+        min_days = None
+        for target_weekday in target_weekdays:
+            days_diff = target_weekday - current_weekday
+            if days_diff < 0:
+                days_diff += 7
+            if min_days is None or days_diff < min_days:
+                min_days = days_diff
 
-        target_date = reference_date + timedelta(days=days_diff)
+        if min_days is None:
+            # No target weekdays specified, return reference date
+            return (reference_date, reference_date)
+
+        target_date = reference_date + timedelta(days=min_days)
         return (target_date, target_date)
 
     if rule.frequency == "monthly":
@@ -60,8 +70,10 @@ def calculate_period(
             return (target_date, target_date)
 
         if rule.day_of_week is not None and rule.week_of_month is not None:
+            # day_of_week is a list; use the first element for nth weekday calculation
+            target_weekday = rule.day_of_week[0] if rule.day_of_week else 0
             target_date = _get_nth_weekday(
-                year, month, rule.day_of_week, rule.week_of_month
+                year, month, target_weekday, rule.week_of_month
             )
             return (target_date, target_date)
 
@@ -75,8 +87,10 @@ def calculate_period(
             return (date(year, month, day), date(year, month, day))
 
         if rule.day_of_week is not None and rule.week_of_month is not None:
+            # day_of_week is a list; use the first element for nth weekday calculation
+            target_weekday = rule.day_of_week[0] if rule.day_of_week else 0
             target_date = _get_nth_weekday(
-                year, month, rule.day_of_week, rule.week_of_month
+                year, month, target_weekday, rule.week_of_month
             )
             return (target_date, target_date)
 

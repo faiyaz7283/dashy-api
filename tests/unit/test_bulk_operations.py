@@ -1,6 +1,9 @@
 """Unit tests for bulk operations (Phase 6)."""
 
+from uuid import UUID
+
 import pytest
+from uuid6 import uuid7
 
 from app.domain.chores.models import MasterChore, MasterChoreStatus
 from app.domain.chores.services import ChoresService
@@ -26,10 +29,10 @@ class TestBulkUpdateMasterStatus:
         """Test updating status of a single master."""
         # Create a master chore
         master = MasterChore(
-            id="test-master-1",
+            id=uuid7(),
             name="Test Chore",
-            category_id="test-category",
-            created_by="test-user",
+            category_id=uuid7(),
+            created_by=uuid7(),
         )
         created = await service.create_master_chore(master, tag_ids=[])
 
@@ -48,22 +51,22 @@ class TestBulkUpdateMasterStatus:
         """Test updating status of multiple masters at once."""
         # Create multiple master chores
         master1 = MasterChore(
-            id="test-master-1",
+            id=uuid7(),
             name="Chore 1",
-            category_id="test-category",
-            created_by="test-user",
+            category_id=uuid7(),
+            created_by=uuid7(),
         )
         master2 = MasterChore(
-            id="test-master-2",
+            id=uuid7(),
             name="Chore 2",
-            category_id="test-category",
-            created_by="test-user",
+            category_id=uuid7(),
+            created_by=uuid7(),
         )
         master3 = MasterChore(
-            id="test-master-3",
+            id=uuid7(),
             name="Chore 3",
-            category_id="test-category",
-            created_by="test-user",
+            category_id=uuid7(),
+            created_by=uuid7(),
         )
 
         created1 = await service.create_master_chore(master1, tag_ids=[])
@@ -86,16 +89,16 @@ class TestBulkUpdateMasterStatus:
         """Test updating with some non-existent IDs."""
         # Create one master
         master = MasterChore(
-            id="test-master-1",
+            id=uuid7(),
             name="Test Chore",
-            category_id="test-category",
-            created_by="test-user",
+            category_id=uuid7(),
+            created_by=uuid7(),
         )
         created = await service.create_master_chore(master, tag_ids=[])
 
         # Try to update existing and non-existing masters
         updated_count = await service.bulk_update_master_status(
-            [created.id, "non-existent-id"], MasterChoreStatus.INACTIVE
+            [created.id, uuid7()], MasterChoreStatus.INACTIVE
         )
 
         # Should only update the one that exists
@@ -117,10 +120,10 @@ class TestBulkUpdateMasterStatus:
         """Test resuming masters from inactive to active."""
         # Create and set to inactive
         master = MasterChore(
-            id="test-master-1",
+            id=uuid7(),
             name="Test Chore",
-            category_id="test-category",
-            created_by="test-user",
+            category_id=uuid7(),
+            created_by=uuid7(),
         )
         created = await service.create_master_chore(master, tag_ids=[])
         await service.bulk_update_master_status([created.id], MasterChoreStatus.INACTIVE)
@@ -140,16 +143,16 @@ class TestBulkUpdateMasterStatus:
         """Test archiving multiple masters."""
         # Create multiple masters
         master1 = MasterChore(
-            id="test-master-1",
+            id=uuid7(),
             name="Chore 1",
-            category_id="test-category",
-            created_by="test-user",
+            category_id=uuid7(),
+            created_by=uuid7(),
         )
         master2 = MasterChore(
-            id="test-master-2",
+            id=uuid7(),
             name="Chore 2",
-            category_id="test-category",
-            created_by="test-user",
+            category_id=uuid7(),
+            created_by=uuid7(),
         )
 
         created1 = await service.create_master_chore(master1, tag_ids=[])

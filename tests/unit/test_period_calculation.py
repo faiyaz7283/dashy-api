@@ -35,7 +35,7 @@ class TestCalculatePeriodWeekly:
     def test_weekly_target_in_future(self) -> None:
         """Test weekly when target day is later this week."""
         # Wednesday Aug 26, target Monday (0) → next Monday Aug 31
-        rule = RecurrenceRule(frequency="weekly", day_of_week=0, time="10:00")
+        rule = RecurrenceRule(frequency="weekly", day_of_week=[0], time="10:00")
         ref = date(2026, 8, 26)  # Wednesday
 
         start, end = calculate_period(rule, ref)
@@ -46,7 +46,7 @@ class TestCalculatePeriodWeekly:
     def test_weekly_target_is_today(self) -> None:
         """Test weekly when reference date is the target day."""
         # Monday Aug 31, target Monday (0) → same day
-        rule = RecurrenceRule(frequency="weekly", day_of_week=0, time="10:00")
+        rule = RecurrenceRule(frequency="weekly", day_of_week=[0], time="10:00")
         ref = date(2026, 8, 31)  # Monday
 
         start, end = calculate_period(rule, ref)
@@ -57,7 +57,7 @@ class TestCalculatePeriodWeekly:
     def test_weekly_target_in_past_wraps_to_next_week(self) -> None:
         """Test weekly when target day already passed this week."""
         # Tuesday Sep 1, target Monday (0) → next Monday Sep 7
-        rule = RecurrenceRule(frequency="weekly", day_of_week=0, time="10:00")
+        rule = RecurrenceRule(frequency="weekly", day_of_week=[0], time="10:00")
         ref = date(2026, 9, 1)  # Tuesday
 
         start, end = calculate_period(rule, ref)
@@ -68,7 +68,7 @@ class TestCalculatePeriodWeekly:
     def test_weekly_friday(self) -> None:
         """Test weekly with Friday as target."""
         # Wednesday Aug 26, target Friday (4) → Friday Aug 28
-        rule = RecurrenceRule(frequency="weekly", day_of_week=4, time="15:00")
+        rule = RecurrenceRule(frequency="weekly", day_of_week=[4], time="15:00")
         ref = date(2026, 8, 26)  # Wednesday
 
         start, end = calculate_period(rule, ref)
@@ -104,7 +104,7 @@ class TestCalculatePeriodMonthly:
         """Test monthly with Nth weekday pattern (first Monday)."""
         # August 2026: first Monday is Aug 3
         rule = RecurrenceRule(
-            frequency="monthly", day_of_week=0, week_of_month=1, time="09:00"
+            frequency="monthly", day_of_week=[0], week_of_month=1, time="09:00"
         )
         ref = date(2026, 8, 20)
 
@@ -131,7 +131,7 @@ class TestCalculatePeriodYearly:
         """Test yearly with Nth weekday pattern (4th Thursday of November)."""
         # November 2026: 4th Thursday is Nov 26
         rule = RecurrenceRule(
-            frequency="yearly", month=11, day_of_week=3, week_of_month=4, time="12:00"
+            frequency="yearly", month=11, day_of_week=[3], week_of_month=4, time="12:00"
         )
         ref = date(2026, 8, 20)
 
@@ -217,7 +217,7 @@ class TestGetNextOccurrence:
 
     def test_weekly_on_target_day_before_time_returns_today(self) -> None:
         """Test weekly on target day before configured time returns today."""
-        rule = RecurrenceRule(frequency="weekly", day_of_week=0, time="10:00")
+        rule = RecurrenceRule(frequency="weekly", day_of_week=[0], time="10:00")
         ref = date(2026, 8, 31)  # Monday
 
         result = get_next_occurrence(rule, ref, "08:00")
@@ -226,7 +226,7 @@ class TestGetNextOccurrence:
 
     def test_weekly_on_target_day_after_time_returns_next_week(self) -> None:
         """Test weekly on target day after configured time returns next week."""
-        rule = RecurrenceRule(frequency="weekly", day_of_week=0, time="10:00")
+        rule = RecurrenceRule(frequency="weekly", day_of_week=[0], time="10:00")
         ref = date(2026, 8, 31)  # Monday
 
         result = get_next_occurrence(rule, ref, "11:00")
@@ -235,7 +235,7 @@ class TestGetNextOccurrence:
 
     def test_weekly_not_on_target_day_returns_next_target(self) -> None:
         """Test weekly when not on target day returns next occurrence."""
-        rule = RecurrenceRule(frequency="weekly", day_of_week=0, time="10:00")
+        rule = RecurrenceRule(frequency="weekly", day_of_week=[0], time="10:00")
         ref = date(2026, 8, 26)  # Wednesday
 
         result = get_next_occurrence(rule, ref, "15:00")

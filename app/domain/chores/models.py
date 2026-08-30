@@ -231,8 +231,8 @@ class ChoreInstance:
     master_chore_id: UUID
     association_id: UUID
     period_start: date
-    period_end: date | None = None
     member_id: UUID
+    period_end: date | None = None
     assigned_by: UUID | None = None
     status: InstanceStatus = InstanceStatus.ACTIVE
     started_at: datetime | None = None
@@ -282,8 +282,8 @@ class ChoreAssociation:
 
     id: UUID
     master_chore_id: UUID
-    member_id: UUID | None = None
     created_by: UUID
+    member_id: UUID | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     removed_at: datetime | None = None
