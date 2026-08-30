@@ -3,6 +3,8 @@
 Provides endpoints for fetching calendar events.
 """
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends
 from googleapiclient.errors import HttpError
 
@@ -95,10 +97,23 @@ async def get_calendar(
 
         # Fetch events from all family member calendars
         all_events = []
+        fetch_timestamp = datetime.now(UTC).isoformat()
 
         for member in family_members_list:
             try:
                 raw_events = await calendar_provider.fetch_events(member.email, date_range)
+
+                # Track per-member metadata
+                member_meta_key = f"calendar:member_meta:{member.id}:{fetch_timestamp[:10]}"
+                await cache.set(
+                    member_meta_key,
+                    {
+                        "status": "success",
+                        "last_fetch": fetch_timestamp,
+                        "event_count": len(raw_events),
+                    },
+                    ttl=settings.CALENDAR_CACHE_TTL,
+                )
 
                 for event in raw_events:
                     recurring_rules = {}
@@ -112,6 +127,19 @@ async def get_calendar(
 
             except Exception as e:
                 logger.error("calendar_fetch_error", member=member.name, error=str(e))
+
+                # Track per-member failure metadata
+                member_meta_key = f"calendar:member_meta:{member.id}:{fetch_timestamp[:10]}"
+                await cache.set(
+                    member_meta_key,
+                    {
+                        "status": "failed",
+                        "last_fetch": fetch_timestamp,
+                        "error": str(e),
+                        "event_count": 0,
+                    },
+                    ttl=settings.CALENDAR_CACHE_TTL,
+                )
                 continue
 
         # Deduplicate events (merge shared events from multiple calendars)

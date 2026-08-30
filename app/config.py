@@ -105,6 +105,10 @@ class Settings(BaseSettings):
     CALENDAR_CACHE_TTL: int = 300  # 5 minutes (fresh)
     CALENDAR_STALE_TTL: int = 604800  # 7 days (stale fallback)
 
+    # Metrics
+    METRICS_ENABLED: bool = True
+    NETWORK_HEALTH_CHECK_TTL: int = 60  # seconds between upstream reachability checks
+
     # Timezone
     TIMEZONE: str = "America/New_York"
 

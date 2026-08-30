@@ -12,7 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import calendar, chores, config, family, weather
+from app.api.routes import calendar, chores, config, family, metrics, weather
 from app.config import settings
 from app.core.cache import close_cache, get_cache
 from app.core.database import check_connection
@@ -183,6 +183,7 @@ app.include_router(calendar.router, prefix="/api/v1")
 app.include_router(family.router, prefix="/api/v1")
 app.include_router(chores.router, prefix="/api/v1")
 app.include_router(config.router, prefix="/api/v1")
+app.include_router(metrics.router, prefix="/api/v1")
 
 
 @app.get("/health")

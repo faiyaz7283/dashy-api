@@ -112,6 +112,39 @@ class Cache:
             self._stats.misses += 1
             return None
 
+    async def get_with_metadata(self, key: str) -> dict[str, Any] | None:
+        """Get value from cache with metadata (TTL remaining).
+
+        Args:
+            key: Cache key.
+
+        Returns:
+            Dict with 'value', 'ttl_remaining', and 'created_at' keys, or None if not found.
+        """
+        if not self._client:
+            return None
+
+        try:
+            # Get value and TTL in parallel
+            value, ttl = await asyncio.gather(
+                self._client.get(key),
+                self._client.ttl(key),
+            )
+
+            if value is None:
+                return None
+
+            # TTL is in seconds, -2 means key doesn't exist, -1 means no expiry
+            ttl_remaining = ttl if ttl > 0 else 0
+
+            return {
+                "value": json.loads(value),
+                "ttl_remaining": ttl_remaining,
+            }
+        except Exception as e:
+            logger.warning("cache_get_with_metadata_failed", key=key, error=str(e))
+            return None
+
     async def set(self, key: str, value: Any, ttl: int) -> None:
         """Set value in cache with TTL.
 
