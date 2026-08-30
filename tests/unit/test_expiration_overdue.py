@@ -126,10 +126,18 @@ class TestOverdueDetection:
         )
         await service.create_association(association)
 
-        # Get the generated instance
-        instances = await service.get_instances(master_chore_id=master.id)
-        assert len(instances) >= 1
-        instance = instances[0]
+        # Manually create an instance for today (not tomorrow)
+        today = datetime.now(UTC).date()
+        instance = ChoreInstance(
+            id=uuid7(),
+            master_chore_id=master.id,
+            association_id=association.id,
+            period_start=today,
+            period_end=today,
+            member_id=association.member_id,
+            status=InstanceStatus.ACTIVE,
+        )
+        await service.repository.create_instance(instance)
 
         # Mark overdue (this will check if current time > due_time)
         marked = await service.mark_overdue_instances()
@@ -145,6 +153,59 @@ class TestOverdueDetection:
         else:
             # Before 8am, no instances should be marked overdue
             assert len(marked) == 0
+
+    @pytest.mark.asyncio
+    async def test_future_instances_not_marked_overdue(
+        self, service: ChoresService
+    ) -> None:
+        """Test that instances with period_start in the future are NOT marked overdue.
+
+        This prevents the edge case where a recurring chore generates an instance
+        for a future date (e.g., weekly Wednesday chore on Monday), and the current
+        time is past the due_time — the future instance should NOT be marked overdue
+        because the member hasn't had a chance to complete it yet.
+        """
+        # Create master with due_time in the past
+        master = MasterChore(
+            id=uuid7(),
+            name="Future Instance Test",
+            category_id=uuid7(),
+            frequency="daily",
+            frequency_interval=1,
+            due_time="08:00",  # Due at 8am
+            created_by=uuid7(),
+        )
+        await service.create_master_chore(master, tag_ids=[])
+
+        # Create association
+        association = ChoreAssociation(
+            id=uuid7(),
+            master_chore_id=master.id,
+            member_id=uuid7(),
+            created_by=master.created_by,
+        )
+        await service.create_association(association)
+
+        # Manually create an instance for TOMORROW (future period)
+        tomorrow = datetime.now(UTC).date() + timedelta(days=1)
+        future_instance = ChoreInstance(
+            id=uuid7(),
+            master_chore_id=master.id,
+            association_id=association.id,
+            period_start=tomorrow,
+            period_end=tomorrow,
+            member_id=association.member_id,
+            status=InstanceStatus.ACTIVE,
+        )
+        await service.repository.create_instance(future_instance)
+
+        # Mark overdue — should NOT mark the future instance
+        await service.mark_overdue_instances()
+
+        # Future instance should remain ACTIVE regardless of current time
+        updated_instance = await service.repository.get_instance_by_id(future_instance.id)
+        assert updated_instance is not None
+        assert updated_instance.status == InstanceStatus.ACTIVE
 
 
 class TestSafetyNetIntegration:

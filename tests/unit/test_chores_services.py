@@ -1,6 +1,6 @@
 """Unit tests for chores domain services."""
 
-from datetime import date, datetime, timedelta, UTC
+from datetime import UTC, date, datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
@@ -754,7 +754,9 @@ class TestInstanceGeneration:
         assert old_instance_after.status == InstanceStatus.ARCHIVED
 
         # Verify the new instance is ACTIVE
-        new_instance_after = next(i for i in instances_after if i.period_start == new_instance.period_start)
+        new_instance_after = next(
+            i for i in instances_after if i.period_start == new_instance.period_start
+        )
         assert new_instance_after.status == InstanceStatus.ACTIVE
 
 

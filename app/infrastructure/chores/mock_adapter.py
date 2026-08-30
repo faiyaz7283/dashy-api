@@ -802,6 +802,8 @@ class MockChoresRepository:
         for instance in self._instances:
             if instance.status not in (InstanceStatus.ACTIVE, InstanceStatus.IN_PROGRESS):
                 continue
+            if instance.period_start > today:
+                continue
             if instance.period_end is None or instance.period_end < today:
                 continue
 

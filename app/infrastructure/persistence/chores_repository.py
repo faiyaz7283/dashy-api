@@ -637,7 +637,8 @@ class ChoresRepositoryImpl:
 
         Overdue detection requires joining with master_chores to check due_time.
         An instance is overdue if:
-        - It's within its period (period_end >= today)
+        - Its period has started (period_start <= today)
+        - Its period hasn't ended (period_end >= today)
         - Its master's due_time has passed
         - Status is ACTIVE or IN_PROGRESS
 
@@ -652,6 +653,7 @@ class ChoresRepositoryImpl:
             select(ChoreInstanceDB)
             .join(MasterChoreDB, ChoreInstanceDB.master_chore_id == MasterChoreDB.id)
             .where(
+                ChoreInstanceDB.period_start <= today,
                 ChoreInstanceDB.period_end >= today,
                 ChoreInstanceDB.status.in_([
                     InstanceStatus.ACTIVE.value,
