@@ -19,10 +19,10 @@ class MockCalendarAdapter:
         calendar_id: str,
         date_range: DateRange,
     ) -> list[dict]:
-        """Fetch mock calendar events within date range.
+        """Fetch mock calendar events within date range for a specific member.
 
         Args:
-            calendar_id: Calendar identifier (ignored for mock data).
+            calendar_id: Calendar identifier (member email).
             date_range: Date range to query.
 
         Returns:
@@ -31,4 +31,14 @@ class MockCalendarAdapter:
         start_date = date_range.start.strftime("%Y-%m-%d")
         end_date = date_range.end.strftime("%Y-%m-%d")
 
-        return get_mock_calendar_events(start_date, end_date)
+        all_events = get_mock_calendar_events(start_date, end_date)
+
+        # Filter events to only those where the member is an attendee
+        return [
+            event
+            for event in all_events
+            if any(
+                attendee.get("email") == calendar_id
+                for attendee in event.get("attendees", [])
+            )
+        ]

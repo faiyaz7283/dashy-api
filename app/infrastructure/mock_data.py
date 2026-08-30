@@ -99,306 +99,127 @@ def get_mock_calendar_events(
 
     total_days = (range_end - range_start).days + 1
 
-    # Event templates: (day_offset, start_h, start_m, end_h, end_m, title,
-    #                   members, all_day, organizer, description, location, recurrence)
-    event_templates = [
-        (
-            0,
-            9,
-            0,
-            9,
-            30,
-            "Team Standup",
-            ["faiyaz"],
-            False,
-            "faiyaz",
-            "Daily sync with the team",
-            None,
-            "RRULE:FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR",
-        ),
-        (
-            0,
-            10,
-            0,
-            11,
-            0,
-            "Morning Yoga",
-            ["trisha"],
-            False,
-            "trisha",
-            "Vinyasa flow class",
-            "Local Studio",
-            None,
-        ),
-        (
-            0,
-            16,
-            0,
-            17,
-            30,
-            "Soccer Practice",
-            ["arya"],
-            False,
-            "faiyaz",
-            "Weekly soccer practice",
-            "Community Field",
-            "RRULE:FREQ=WEEKLY;BYDAY=MO",
-        ),
-        (
-            1,
-            8,
-            0,
-            9,
-            0,
-            "Dentist Appt",
-            ["faiyaz", "arya"],
-            False,
-            "faiyaz",
-            "Regular checkup for Arya",
-            "Dr. Smith's Office",
-            None,
-        ),
-        (
-            1,
-            9,
-            0,
-            12,
-            0,
-            "Preschool",
-            ["raya"],
-            False,
-            "trisha",
-            "Morning preschool session",
-            "Little Learners Academy",
-            "RRULE:FREQ=WEEKLY;BYDAY=TU,TH",
-        ),
-        (
-            1,
-            11,
-            0,
-            12,
-            0,
-            "Grocery Shopping",
-            ["trisha"],
-            False,
-            "trisha",
-            "Weekly grocery run",
-            "Whole Foods",
-            None,
-        ),
-        (
-            1,
-            18,
-            0,
-            19,
-            0,
-            "Gym",
-            ["faiyaz"],
-            False,
-            "faiyaz",
-            "Workout session",
-            "LA Fitness",
-            "RRULE:FREQ=WEEKLY;BYDAY=TU",
-        ),
-        (
-            2,
-            15,
-            0,
-            16,
-            0,
-            "Reading Club",
-            ["arya"],
-            False,
-            "trisha",
-            "Book discussion group",
-            "Library",
-            None,
-        ),
-        (
-            2,
-            16,
-            0,
-            17,
-            0,
-            "Piano Lesson",
-            ["trisha", "arya"],
-            False,
-            "trisha",
-            "Arya's piano lesson",
-            "Music School",
-            "RRULE:FREQ=WEEKLY;BYDAY=WE",
-        ),
-        (
-            2,
-            19,
-            0,
-            22,
-            0,
-            "Date Night",
-            ["faiyaz", "trisha"],
-            False,
-            "faiyaz",
-            "Weekly date night",
-            "Italian Restaurant",
-            None,
-        ),
-        (
-            3,
-            10,
-            0,
-            12,
-            0,
-            "Playdate w/ Lily",
-            ["raya"],
-            False,
-            "trisha",
-            "Playdate with Lily from preschool",
-            "Lily's House",
-            None,
-        ),
-        (
-            3,
-            17,
-            0,
-            18,
-            30,
-            "Cook Dinner",
-            ["trisha"],
-            False,
-            "trisha",
-            "Prepare meals for the week",
-            "Home",
-            None,
-        ),
-        (
-            4,
-            0,
-            0,
-            23,
-            59,
-            "Science Fair Project",
-            ["arya", "faiyaz"],
-            True,
-            "faiyaz",
-            "Work on Arya's science fair project",
-            "Home",
-            None,
-        ),
-        (
-            4,
-            13,
-            0,
-            17,
-            0,
-            "Team Offsite",
-            ["faiyaz"],
-            False,
-            "faiyaz",
-            "Quarterly team offsite meeting",
-            "Conference Center",
-            None,
-        ),
-        (
-            4,
-            19,
-            0,
-            21,
-            0,
-            "Family Movie Night",
-            ["faiyaz", "trisha", "arya", "raya"],
-            False,
-            "faiyaz",
-            "Watch a family movie together",
-            "Home",
-            "RRULE:FREQ=WEEKLY;BYDAY=FR",
-        ),
-        (
-            5,
-            10,
-            0,
-            12,
-            0,
-            "Park Visit",
-            ["raya", "arya"],
-            False,
-            "trisha",
-            "Visit the playground",
-            "Central Park",
-            None,
-        ),
-        (
-            5,
-            11,
-            0,
-            13,
-            0,
-            "Brunch w/ Friends",
-            ["trisha", "faiyaz"],
-            False,
-            "trisha",
-            "Brunch with Sarah and Mike",
-            "Cafe Downtown",
-            None,
-        ),
-        (
-            6,
-            11,
-            0,
-            13,
-            0,
-            "Meal Prep",
-            ["faiyaz", "trisha"],
-            False,
-            "trisha",
-            "Prepare meals for the upcoming week",
-            "Home",
-            "RRULE:FREQ=WEEKLY;BYDAY=SU",
-        ),
-        (
-            6,
-            15,
-            0,
-            17,
-            0,
-            "Homework Catch-up",
-            ["arya"],
-            False,
-            "arya",
-            "Finish homework assignments",
-            "Home",
-            None,
-        ),
-    ]
-
     events = []
     event_id = 0
-    # Repeat the weekly template pattern across the requested range, so long
-    # ranges (month/year views) are populated throughout, not just week one.
-    for week in range((total_days + 6) // 7):
-        for tpl in event_templates:
-            (
-                day_offset,
-                sh,
-                sm,
-                eh,
-                em,
-                title,
-                members,
-                all_day,
-                organizer,
-                description,
-                location,
-                recurrence,
-            ) = tpl
-            actual_day = week * 7 + day_offset
-            if actual_day >= total_days:
-                continue
+
+    # Build email mapping from member keys to actual emails
+    mock_members = get_mock_family_members()
+    member_email_map = {m.key: m.email for m in mock_members}
+
+    # Generate events for each day in the range
+    for day_offset in range(total_days):
+        current_date = range_start + timedelta(days=day_offset)
+        # Get day of week (0=Monday, 6=Sunday)
+        day_of_week = current_date.weekday()
+
+        # Calculate week number from the start of the year for variation
+        week_number = current_date.isocalendar()[1]
+
+        # Base events for each day of the week
+        day_events = []
+
+        # Monday events (day_of_week = 0)
+        if day_of_week == 0:
+            day_events.extend([
+                (9, 0, 9, 30, "Team Standup", ["faiyaz"], False, "faiyaz",
+                 "Daily sync with the team", None, "RRULE:FREQ=DAILY;BYDAY=MO,TU,WE,TH,FR"),
+                (10, 0, 11, 0, "Morning Yoga", ["trisha"], False, "trisha",
+                 "Vinyasa flow class", "Local Studio", None),
+                (16, 0, 17, 30, "Soccer Practice", ["arya"], False, "faiyaz",
+                 "Weekly soccer practice", "Community Field", "RRULE:FREQ=WEEKLY;BYDAY=MO"),
+            ])
+
+        # Tuesday events (day_of_week = 1)
+        elif day_of_week == 1:
+            day_events.extend([
+                (8, 0, 9, 0, "Dentist Appt", ["faiyaz", "arya"], False, "faiyaz",
+                 "Regular checkup for Arya", "Dr. Smith's Office", None),
+                (9, 0, 12, 0, "Preschool", ["raya"], False, "trisha",
+                 "Morning preschool session", "Little Learners Academy",
+                 "RRULE:FREQ=WEEKLY;BYDAY=TU,TH"),
+                (11, 0, 12, 0, "Grocery Shopping", ["trisha"], False, "trisha",
+                 "Weekly grocery run", "Whole Foods", None),
+                (18, 0, 19, 0, "Gym", ["faiyaz"], False, "faiyaz",
+                 "Workout session", "LA Fitness", "RRULE:FREQ=WEEKLY;BYDAY=TU"),
+            ])
+
+        # Wednesday events (day_of_week = 2)
+        elif day_of_week == 2:
+            day_events.extend([
+                (15, 0, 16, 0, "Reading Club", ["arya"], False, "trisha",
+                 "Book discussion group", "Library", None),
+                (16, 0, 17, 0, "Piano Lesson", ["trisha", "arya"], False, "trisha",
+                 "Arya's piano lesson", "Music School", "RRULE:FREQ=WEEKLY;BYDAY=WE"),
+                (19, 0, 22, 0, "Date Night", ["faiyaz", "trisha"], False, "faiyaz",
+                 "Weekly date night", "Italian Restaurant", None),
+            ])
+            # Add variation for even weeks
+            if week_number % 2 == 0:
+                day_events.append(
+                    (14, 0, 15, 30, "Dentist Appointment", ["arya"], False, "trisha",
+                     "Regular checkup", "Dr. Smith's Office", None)
+                )
+
+        # Thursday events (day_of_week = 3)
+        elif day_of_week == 3:
+            day_events.extend([
+                (10, 0, 12, 0, "Playdate w/ Lily", ["raya"], False, "trisha",
+                 "Playdate with Lily from preschool", "Lily's House", None),
+                (17, 0, 18, 30, "Cook Dinner", ["trisha"], False, "trisha",
+                 "Prepare meals for the week", "Home", None),
+            ])
+
+        # Friday events (day_of_week = 4)
+        elif day_of_week == 4:
+            day_events.extend([
+                (0, 0, 23, 59, "Science Fair Project", ["arya", "faiyaz"], True, "faiyaz",
+                 "Work on Arya's science fair project", "Home", None),
+                (13, 0, 17, 0, "Team Offsite", ["faiyaz"], False, "faiyaz",
+                 "Quarterly team offsite meeting", "Conference Center", None),
+                (19, 0, 21, 0, "Family Movie Night", ["faiyaz", "trisha", "arya", "raya"],
+                 False, "faiyaz", "Watch a family movie together", "Home",
+                 "RRULE:FREQ=WEEKLY;BYDAY=FR"),
+            ])
+            # Add variation for every 3rd week
+            if week_number % 3 == 0:
+                day_events.append(
+                    (19, 0, 21, 0, "Family Game Night",
+                     ["faiyaz", "trisha", "arya", "raya"], False, "faiyaz",
+                     "Board games", "Home", None)
+                )
+
+        # Saturday events (day_of_week = 5)
+        elif day_of_week == 5:
+            day_events.extend([
+                (10, 0, 12, 0, "Park Visit", ["raya", "arya"], False, "trisha",
+                 "Visit the playground", "Central Park", None),
+                (11, 0, 13, 0, "Brunch w/ Friends", ["trisha", "faiyaz"], False, "trisha",
+                 "Brunch with Sarah and Mike", "Cafe Downtown", None),
+            ])
+            # Add variation for every 4th week starting from week 1
+            if week_number % 4 == 1:
+                day_events.append(
+                    (10, 0, 12, 0, "Park Visit", ["raya", "arya"], False, "trisha",
+                     "Playground", "Central Park", None)
+                )
+
+        # Sunday events (day_of_week = 6)
+        elif day_of_week == 6:
+            day_events.extend([
+                (11, 0, 13, 0, "Meal Prep", ["faiyaz", "trisha"], False, "trisha",
+                 "Prepare meals for the upcoming week", "Home",
+                 "RRULE:FREQ=WEEKLY;BYDAY=SU"),
+                (15, 0, 17, 0, "Homework Catch-up", ["arya"], False, "arya",
+                 "Finish homework assignments", "Home", None),
+            ])
+
+        # Generate events for this day
+        for event_data in day_events:
+            sh, sm, eh, em, title, members, all_day, organizer, desc, loc, recurrence = event_data
             event_id += 1
 
-            event_start = range_start + timedelta(days=actual_day)
-            event_start = event_start.replace(hour=sh, minute=sm)
-            event_end = range_start + timedelta(days=actual_day)
-            event_end = event_end.replace(hour=eh, minute=em)
+            event_start = current_date.replace(hour=sh, minute=sm)
+            event_end = current_date.replace(hour=eh, minute=em)
 
             if all_day:
                 event_start = event_start.replace(hour=0, minute=0)
@@ -407,9 +228,10 @@ def get_mock_calendar_events(
             # Create mock attendees in Google Calendar API format
             attendees = []
             for member_key in members:
+                email = member_email_map[member_key]
                 attendees.append(
                     {
-                        "email": f"{member_key}@gmail.com",
+                        "email": email,
                         "displayName": member_key.capitalize(),
                         "responseStatus": "accepted",
                         "self": member_key == organizer,
@@ -421,22 +243,20 @@ def get_mock_calendar_events(
                 "id": str(event_id),
                 "summary": title,
                 "status": "confirmed",
-                "description": description,
-                "location": location,
+                "description": desc,
+                "location": loc,
                 "creator": {
-                    "email": f"{organizer}@gmail.com",
+                    "email": member_email_map[organizer],
                     "displayName": organizer.capitalize(),
                 },
                 "organizer": {
-                    "email": f"{organizer}@gmail.com",
+                    "email": member_email_map[organizer],
                     "displayName": organizer.capitalize(),
                 },
                 "attendees": attendees,
             }
 
             # Add start/end times in Google Calendar API format
-            # Google Calendar API returns datetime strings with timezone designators
-            # Use "Z" suffix to match production format exactly
             if all_day:
                 event["start"] = {"date": event_start.strftime("%Y-%m-%d")}
                 event["end"] = {"date": event_end.strftime("%Y-%m-%d")}
@@ -449,6 +269,14 @@ def get_mock_calendar_events(
                 event["recurrence"] = [recurrence]
 
             events.append(event)
+
+    # Sort events by start time
+    def get_start_time(e):
+        if "dateTime" in e["start"]:
+            return e["start"]["dateTime"]
+        return e["start"]["date"] + "T00:00:00Z"
+
+    events.sort(key=get_start_time)
 
     return events
 
