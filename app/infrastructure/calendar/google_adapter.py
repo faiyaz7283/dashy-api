@@ -13,6 +13,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from app.config import settings
+from app.core.exceptions import CalendarConfigError, UpstreamServiceError
 from app.core.logging import get_logger
 from app.domain.calendar.models import DateRange
 
@@ -38,21 +39,29 @@ class GoogleCalendarAdapter:
         """
         self.credentials_path = credentials_path or settings.GOOGLE_SERVICE_ACCOUNT_JSON
 
-    def _get_credentials(self) -> service_account.Credentials | None:
+    def _get_credentials(self) -> service_account.Credentials:
         """Load service account credentials from JSON file.
 
         Returns:
-            Service account credentials or None if file doesn't exist.
+            Service account credentials.
+
+        Raises:
+            CalendarConfigError: If credentials file is missing or invalid.
         """
         if not self.credentials_path:
-            return None
+            raise CalendarConfigError(
+                "Google service account credentials not configured",
+                detail="GOOGLE_SERVICE_ACCOUNT_JSON is not set",
+            )
         try:
             return service_account.Credentials.from_service_account_file(
                 self.credentials_path, scopes=SCOPES
             )
         except Exception as e:
-            logger.error("credentials_load_error", error=str(e))
-            return None
+            raise CalendarConfigError(
+                f"Failed to load Google service account credentials: {e}",
+                detail=str(e),
+            ) from e
 
     def _fetch_events_sync(
         self, calendar_id: str, time_min: datetime, time_max: datetime
@@ -66,11 +75,11 @@ class GoogleCalendarAdapter:
 
         Returns:
             List of raw event dicts from Google Calendar API.
+
+        Raises:
+            UpstreamServiceError: If the Google Calendar API is unreachable or fails.
         """
         credentials = self._get_credentials()
-        if not credentials:
-            logger.warning("no_credentials", calendar_id=calendar_id)
-            return []
 
         try:
             service = build("calendar", "v3", credentials=credentials)
@@ -105,10 +114,18 @@ class GoogleCalendarAdapter:
 
         except HttpError as e:
             logger.error("google_calendar_api_error", calendar_id=calendar_id, error=str(e))
-            return []
+            raise UpstreamServiceError(
+                f"Google Calendar API failed for {calendar_id}: {e}",
+                service_name="google-calendar",
+                detail=str(e),
+            ) from e
         except Exception as e:
             logger.error("google_calendar_unexpected_error", calendar_id=calendar_id, error=str(e))
-            return []
+            raise UpstreamServiceError(
+                f"Google Calendar API unexpected error for {calendar_id}: {e}",
+                service_name="google-calendar",
+                detail=str(e),
+            ) from e
 
     def _fetch_recurring_rules_sync(
         self, service, calendar_id: str, time_min: datetime, time_max: datetime

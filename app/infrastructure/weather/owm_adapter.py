@@ -16,6 +16,7 @@ from app.api.models.weather import (
     WeatherResponse,
 )
 from app.config import settings
+from app.core.exceptions import UpstreamServiceError
 from app.core.logging import get_logger
 from app.infrastructure.weather.http_client import get_http_client
 
@@ -178,10 +179,10 @@ def _build_response(
             sunset=_ts_to_iso(current_record["sunset"]) if "sunset" in current_record else None,
         )
     else:
-        # Should not reach here since we already checked current_data, but fallback
-        from app.infrastructure.mock_data import get_mock_weather
-
-        return get_mock_weather(units)
+        raise UpstreamServiceError(
+            "Weather API returned empty current conditions",
+            service_name="openweathermap",
+        )
 
     # Build daily forecast
     forecast: list[DailyForecast] = []
@@ -289,10 +290,10 @@ class OWMWeatherAdapter:
         # Step 1: Fetch current weather
         current_data = await self._fetch_current(client)
         if current_data is None:
-            logger.warning("current_weather_failed", msg="falling back to mock data")
-            from app.infrastructure.mock_data import get_mock_weather
-
-            return get_mock_weather(units)
+            raise UpstreamServiceError(
+                "Weather API unreachable — current conditions unavailable",
+                service_name="openweathermap",
+            )
 
         # Step 2: Calculate start timestamp (today's midnight in UTC)
         start_ts = _get_today_midnight_timestamp()
@@ -303,12 +304,12 @@ class OWMWeatherAdapter:
 
         daily_data, hourly_data = await asyncio.gather(daily_task, hourly_task)
 
-        # If both failed, fall back to mock
+        # If both failed, raise error
         if daily_data is None and hourly_data is None:
-            logger.warning("daily_hourly_failed", msg="falling back to mock data")
-            from app.infrastructure.mock_data import get_mock_weather
-
-            return get_mock_weather(units)
+            raise UpstreamServiceError(
+                "Weather API unreachable — forecast data unavailable",
+                service_name="openweathermap",
+            )
 
         return _build_response(current_data, hourly_data, daily_data, units)
 
