@@ -152,9 +152,9 @@ async def get_metrics(cache: CacheDep, family_service: FamilyServiceDep):
             detail="Metrics endpoint is disabled",
         )
 
-    # Get weather cache metadata
-    weather_fresh_meta = await cache.get_with_metadata("weather:fresh")
-    weather_stale_meta = await cache.get_with_metadata("weather:stale")
+    # Get weather cache metadata (default units is imperial)
+    weather_fresh_meta = await cache.get_with_metadata("weather:imperial:fresh")
+    weather_stale_meta = await cache.get_with_metadata("weather:imperial:stale")
 
     # Determine weather status
     if weather_fresh_meta:
@@ -183,9 +183,9 @@ async def get_metrics(cache: CacheDep, family_service: FamilyServiceDep):
         }
         weather_last_fetch = None
 
-    # Get calendar cache metadata
-    calendar_fresh_meta = await cache.get_with_metadata("calendar:fresh")
-    calendar_stale_meta = await cache.get_with_metadata("calendar:stale")
+    # Get calendar cache metadata (default date range key is "default:default")
+    calendar_fresh_meta = await cache.get_with_metadata("calendar:default:default:fresh")
+    calendar_stale_meta = await cache.get_with_metadata("calendar:default:default:stale")
 
     # Determine calendar status
     if calendar_fresh_meta:

@@ -103,7 +103,7 @@ async def get_calendar(
             try:
                 raw_events = await calendar_provider.fetch_events(member.email, date_range)
 
-                # Track per-member metadata
+                # Track per-member metadata (use stale TTL so metadata persists with data)
                 member_meta_key = f"calendar:member_meta:{member.id}:{fetch_timestamp[:10]}"
                 await cache.set(
                     member_meta_key,
@@ -112,7 +112,7 @@ async def get_calendar(
                         "last_fetch": fetch_timestamp,
                         "event_count": len(raw_events),
                     },
-                    ttl=settings.CALENDAR_CACHE_TTL,
+                    ttl=settings.CALENDAR_STALE_TTL,
                 )
 
                 for event in raw_events:
@@ -128,7 +128,7 @@ async def get_calendar(
             except Exception as e:
                 logger.error("calendar_fetch_error", member=member.name, error=str(e))
 
-                # Track per-member failure metadata
+                # Track per-member failure metadata (use stale TTL so metadata persists with data)
                 member_meta_key = f"calendar:member_meta:{member.id}:{fetch_timestamp[:10]}"
                 await cache.set(
                     member_meta_key,
@@ -138,7 +138,7 @@ async def get_calendar(
                         "error": str(e),
                         "event_count": 0,
                     },
-                    ttl=settings.CALENDAR_CACHE_TTL,
+                    ttl=settings.CALENDAR_STALE_TTL,
                 )
                 continue
 
