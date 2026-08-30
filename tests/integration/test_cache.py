@@ -1,11 +1,13 @@
 """Tests for cache layer."""
 
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.core.cache import Cache, close_cache, get_cache
+from app.core.cache import Cache, RetryConfig, close_cache, get_cache
+from app.core.exceptions import UpstreamServiceError
 from app.main import app
 
 
@@ -244,6 +246,167 @@ class TestCacheIntegration:
                 mock_cache.set.assert_called_once()
         finally:
             app.dependency_overrides.clear()
+
+
+class TestCacheFetch:
+    """Test Cache.fetch() stale-while-revalidate pattern."""
+
+    @pytest.fixture
+    def mock_redis(self):
+        """Create a mock Redis client."""
+        client = AsyncMock()
+        client.ping = AsyncMock()
+        client.get = AsyncMock()
+        client.set = AsyncMock()
+        client.delete = AsyncMock()
+        client.flushdb = AsyncMock()
+        client.aclose = AsyncMock()
+        return client
+
+    @pytest.fixture
+    def cache(self, mock_redis):
+        """Create a cache instance with mock Redis."""
+        cache = Cache()
+        cache._client = mock_redis
+        return cache
+
+    async def test_fetch_returns_fresh_cache(self, cache, mock_redis):
+        """Test fetch returns fresh cache without calling fetcher."""
+        mock_redis.get.side_effect = [json.dumps({"fresh": "data"}), None]
+        fetcher = AsyncMock()
+
+        result = await cache.fetch("test", fetcher, fresh_ttl=60, stale_ttl=3600)
+
+        assert result == {"fresh": "data"}
+        fetcher.assert_not_called()
+        mock_redis.set.assert_not_called()
+
+    async def test_fetch_returns_stale_cache_when_fresh_missing(self, cache, mock_redis):
+        """Test fetch returns stale cache when fresh is missing."""
+        # First call (fresh) returns None, second call (stale) returns data
+        mock_redis.get.side_effect = [None, json.dumps({"stale": "data"})]
+        fetcher = AsyncMock()
+
+        result = await cache.fetch("test", fetcher, fresh_ttl=60, stale_ttl=3600)
+
+        assert result == {"stale": "data"}
+        fetcher.assert_not_called()
+        mock_redis.set.assert_not_called()
+
+    async def test_fetch_calls_fetcher_when_no_cache(self, cache, mock_redis):
+        """Test fetch calls fetcher and writes both fresh and stale keys."""
+        # Both fresh and stale cache miss
+        mock_redis.get.side_effect = [None, None]
+        fetcher = AsyncMock(return_value={"fresh": "data"})
+
+        result = await cache.fetch(
+            "test",
+            fetcher,
+            fresh_ttl=60,
+            stale_ttl=3600,
+            service_name="test-service",
+        )
+
+        assert result == {"fresh": "data"}
+        fetcher.assert_called_once()
+        # Verify both keys were written
+        assert mock_redis.set.call_count == 2
+        calls = mock_redis.set.call_args_list
+        assert calls[0][0][0] == "test:fresh"
+        assert calls[0][1]["ex"] == 60
+        assert calls[1][0][0] == "test:stale"
+        assert calls[1][1]["ex"] == 3600
+
+    async def test_fetch_retries_on_transient_error(self, cache, mock_redis):
+        """Test fetch retries on transient errors and succeeds."""
+        mock_redis.get.side_effect = [None, None]
+        # Fail twice with transient error, then succeed
+        fetcher = AsyncMock(
+            side_effect=[
+                ConnectionError("Connection refused"),
+                TimeoutError("Timeout"),
+                {"fresh": "data"},
+            ]
+        )
+        retry_config = RetryConfig(
+            max_attempts=3,
+            backoff_seconds=[0.01, 0.01],  # Fast backoff for tests
+            transient_errors=(ConnectionError, TimeoutError),
+        )
+
+        result = await cache.fetch(
+            "test",
+            fetcher,
+            fresh_ttl=60,
+            stale_ttl=3600,
+            retry_config=retry_config,
+        )
+
+        assert result == {"fresh": "data"}
+        assert fetcher.call_count == 3
+        assert mock_redis.set.call_count == 2
+
+    async def test_fetch_raises_after_all_retries_fail(self, cache, mock_redis):
+        """Test fetch raises UpstreamServiceError after all retries fail."""
+        mock_redis.get.side_effect = [None, None]
+        fetcher = AsyncMock(side_effect=ConnectionError("Connection refused"))
+        retry_config = RetryConfig(
+            max_attempts=3,
+            backoff_seconds=[0.01, 0.01],
+            transient_errors=(ConnectionError,),
+        )
+
+        with pytest.raises(UpstreamServiceError) as exc_info:
+            await cache.fetch(
+                "test",
+                fetcher,
+                fresh_ttl=60,
+                stale_ttl=3600,
+                retry_config=retry_config,
+                service_name="test-service",
+            )
+
+        assert "test-service unavailable after 3 attempts" in str(exc_info.value)
+        assert exc_info.value.service_name == "test-service"
+        assert fetcher.call_count == 3
+        mock_redis.set.assert_not_called()
+
+    async def test_fetch_raises_immediately_on_non_transient_error(self, cache, mock_redis):
+        """Test fetch raises immediately on non-transient errors without retry."""
+        mock_redis.get.side_effect = [None, None]
+
+        class PermanentError(Exception):
+            pass
+
+        fetcher = AsyncMock(side_effect=PermanentError("Auth failed"))
+        retry_config = RetryConfig(
+            max_attempts=3,
+            backoff_seconds=[0.01, 0.01],
+            transient_errors=(ConnectionError,),  # PermanentError not in list
+        )
+
+        with pytest.raises(UpstreamServiceError) as exc_info:
+            await cache.fetch(
+                "test",
+                fetcher,
+                fresh_ttl=60,
+                stale_ttl=3600,
+                retry_config=retry_config,
+            )
+
+        assert "Auth failed" in str(exc_info.value)
+        assert fetcher.call_count == 1  # No retries
+        mock_redis.set.assert_not_called()
+
+    async def test_fetch_uses_default_retry_config(self, cache, mock_redis):
+        """Test fetch uses default RetryConfig when none provided."""
+        mock_redis.get.side_effect = [None, None]
+        fetcher = AsyncMock(return_value={"data": "value"})
+
+        result = await cache.fetch("test", fetcher, fresh_ttl=60, stale_ttl=3600)
+
+        assert result == {"data": "value"}
+        assert fetcher.call_count == 1
 
 
 class TestCacheLifecycle:

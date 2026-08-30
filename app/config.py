@@ -100,8 +100,10 @@ class Settings(BaseSettings):
 
     # Cache
     REDIS_URL: str = "redis://localhost:6379"
-    WEATHER_CACHE_TTL: int = 600  # 10 minutes
-    CALENDAR_CACHE_TTL: int = 120  # 2 minutes
+    WEATHER_CACHE_TTL: int = 600  # 10 minutes (fresh)
+    WEATHER_STALE_TTL: int = 86400  # 24 hours (stale fallback)
+    CALENDAR_CACHE_TTL: int = 300  # 5 minutes (fresh)
+    CALENDAR_STALE_TTL: int = 604800  # 7 days (stale fallback)
 
     # Timezone
     TIMEZONE: str = "America/New_York"

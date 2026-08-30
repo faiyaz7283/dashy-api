@@ -144,3 +144,37 @@ class ValidationError(DashyError):
             status_code=422,
             detail=detail,
         )
+
+
+class UpstreamServiceError(DashyError):
+    """Raised when an upstream service is unreachable or fails.
+
+    Used by adapters (weather, calendar, etc.) when they cannot reach their
+    upstream API. The cache layer uses this to trigger stale-while-revalidate
+    fallback behavior.
+
+    Attributes:
+        service_name: Name of the upstream service (e.g., "openweathermap", "google-calendar").
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        service_name: str = "upstream",
+        detail: str | None = None,
+    ) -> None:
+        """Initialize an UpstreamServiceError.
+
+        Args:
+            message: Human-readable error description.
+            service_name: Name of the upstream service that failed.
+            detail: Optional extra context for debugging.
+        """
+        super().__init__(
+            message,
+            error_code="upstream-service-error",
+            status_code=503,
+            detail=detail,
+        )
+        self.service_name = service_name

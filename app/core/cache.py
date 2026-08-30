@@ -4,17 +4,36 @@ Provides caching for weather and calendar data to reduce API calls.
 Uses Redis for distributed caching with automatic fallback on failures.
 """
 
+import asyncio
 import contextlib
 import json
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from typing import Any
 
 import redis.asyncio as redis
 from pydantic import BaseModel
 
 from app.config import settings
+from app.core.exceptions import UpstreamServiceError
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class RetryConfig:
+    """Configuration for retry behavior with exponential backoff.
+
+    Attributes:
+        max_attempts: Maximum number of retry attempts (including initial attempt).
+        backoff_seconds: List of delay seconds between attempts. Length should be max_attempts - 1.
+        transient_errors: Tuple of exception types that are considered transient and worth retrying.
+    """
+
+    max_attempts: int = 3
+    backoff_seconds: list[float] = field(default_factory=lambda: [1.0, 2.0, 4.0])
+    transient_errors: tuple[type[Exception], ...] = (ConnectionError, TimeoutError, OSError)
 
 
 class CacheStats(BaseModel):
@@ -137,6 +156,123 @@ class Cache:
         except Exception as e:
             logger.warning("cache_clear_failed", error=str(e))
             self._stats.errors += 1
+
+    async def fetch(
+        self,
+        key: str,
+        fetcher: Callable[[], Awaitable[Any]],
+        fresh_ttl: int,
+        stale_ttl: int,
+        retry_config: RetryConfig | None = None,
+        service_name: str = "upstream",
+    ) -> Any:
+        """Fetch data with stale-while-revalidate pattern and retry logic.
+
+        Implements the SWR pattern: check fresh cache → check stale cache → fetch with retry.
+        On successful fetch, writes both fresh and stale cache keys.
+
+        Args:
+            key: Base cache key (will be suffixed with :fresh and :stale).
+            fetcher: Async callable that fetches fresh data from the source.
+            fresh_ttl: TTL in seconds for the fresh cache entry.
+            stale_ttl: TTL in seconds for the stale cache entry (longer than fresh_ttl).
+            retry_config: Retry configuration. Defaults to RetryConfig() if None.
+            service_name: Name of the upstream service for error reporting.
+
+        Returns:
+            Fresh or stale cached data, or freshly fetched data.
+
+        Raises:
+            UpstreamServiceError: When all retry attempts fail and no stale cache exists.
+        """
+        if retry_config is None:
+            retry_config = RetryConfig()
+
+        fresh_key = f"{key}:fresh"
+        stale_key = f"{key}:stale"
+
+        # 1. Check fresh cache
+        fresh_data = await self.get(fresh_key)
+        if fresh_data is not None:
+            return fresh_data
+
+        # 2. Check stale cache
+        stale_data = await self.get(stale_key)
+        if stale_data is not None:
+            logger.warning(
+                "serving_stale_data",
+                key=key,
+                service_name=service_name,
+                msg="Fresh cache expired, serving stale data",
+            )
+            return stale_data
+
+        # 3. Fetch with retry
+        last_error: Exception | None = None
+        for attempt in range(retry_config.max_attempts):
+            try:
+                result = await fetcher()
+
+                # Write both fresh and stale cache entries
+                await self.set(fresh_key, result, fresh_ttl)
+                await self.set(stale_key, result, stale_ttl)
+
+                logger.info(
+                    "cache_fetch_success",
+                    key=key,
+                    service_name=service_name,
+                    attempt=attempt + 1,
+                )
+                return result
+
+            except retry_config.transient_errors as e:
+                last_error = e
+                logger.warning(
+                    "cache_fetch_retry",
+                    key=key,
+                    service_name=service_name,
+                    attempt=attempt + 1,
+                    max_attempts=retry_config.max_attempts,
+                    error=str(e),
+                )
+
+                # Wait before next retry (if not the last attempt)
+                if attempt < retry_config.max_attempts - 1:
+                    delay = (
+                        retry_config.backoff_seconds[attempt]
+                        if attempt < len(retry_config.backoff_seconds)
+                        else retry_config.backoff_seconds[-1]
+                    )
+                    await asyncio.sleep(delay)
+
+            except Exception as e:
+                # Non-transient error — don't retry
+                logger.error(
+                    "cache_fetch_non_transient_error",
+                    key=key,
+                    service_name=service_name,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                )
+                raise UpstreamServiceError(
+                    f"{service_name} request failed: {e}",
+                    service_name=service_name,
+                    detail=str(e),
+                ) from e
+
+        # 4. All retries failed
+        logger.error(
+            "cache_fetch_all_retries_failed",
+            key=key,
+            service_name=service_name,
+            max_attempts=retry_config.max_attempts,
+            error=str(last_error) if last_error else "unknown",
+        )
+        raise UpstreamServiceError(
+            f"{service_name} unavailable after {retry_config.max_attempts} attempts",
+            service_name=service_name,
+            detail=str(last_error) if last_error else None,
+        ) from last_error
 
     def get_stats(self) -> CacheStats:
         """Get cache statistics.
