@@ -3,7 +3,7 @@
 Provides endpoints for monitoring data freshness and system health.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import httpx
 from fastapi import APIRouter, HTTPException, status
@@ -94,12 +94,13 @@ def calculate_data_status(fresh_ttl: int, stale_ttl: int, ttl_remaining: int | N
         ttl_remaining: TTL remaining for the cache entry, or None if not cached.
 
     Returns:
-        Dict with status, age_seconds, fresh_ttl, and stale_ttl.
+        Dict with status, age_seconds, last_fetch, fresh_ttl, and stale_ttl.
     """
     if ttl_remaining is None:
         return {
             "status": "missing",
             "age_seconds": None,
+            "last_fetch": None,
             "fresh_ttl": fresh_ttl,
             "stale_ttl": stale_ttl,
         }
@@ -119,9 +120,13 @@ def calculate_data_status(fresh_ttl: int, stale_ttl: int, ttl_remaining: int | N
         age_seconds = fresh_ttl + abs(ttl_remaining)
         status_str = "stale"
 
+    # Calculate last_fetch timestamp (current time minus age)
+    last_fetch = (datetime.now(UTC) - timedelta(seconds=age_seconds)).isoformat()
+
     return {
         "status": status_str,
         "age_seconds": age_seconds,
+        "last_fetch": last_fetch,
         "fresh_ttl": fresh_ttl,
         "stale_ttl": stale_ttl,
     }
@@ -163,25 +168,18 @@ async def get_metrics(cache: CacheDep, family_service: FamilyServiceDep):
             stale_ttl=settings.WEATHER_STALE_TTL,
             ttl_remaining=weather_fresh_meta["ttl_remaining"],
         )
-        weather_value = weather_fresh_meta["value"]
-        weather_last_fetch = weather_value.get("timestamp") if weather_value else None
     elif weather_stale_meta:
-        weather_status = {
-            "status": "stale",
-            "age_seconds": settings.WEATHER_CACHE_TTL + abs(weather_stale_meta["ttl_remaining"]),
-            "fresh_ttl": settings.WEATHER_CACHE_TTL,
-            "stale_ttl": settings.WEATHER_STALE_TTL,
-        }
-        weather_value = weather_stale_meta["value"]
-        weather_last_fetch = weather_value.get("timestamp") if weather_value else None
+        weather_status = calculate_data_status(
+            fresh_ttl=settings.WEATHER_CACHE_TTL,
+            stale_ttl=settings.WEATHER_STALE_TTL,
+            ttl_remaining=weather_stale_meta["ttl_remaining"],
+        )
     else:
-        weather_status = {
-            "status": "missing",
-            "age_seconds": None,
-            "fresh_ttl": settings.WEATHER_CACHE_TTL,
-            "stale_ttl": settings.WEATHER_STALE_TTL,
-        }
-        weather_last_fetch = None
+        weather_status = calculate_data_status(
+            fresh_ttl=settings.WEATHER_CACHE_TTL,
+            stale_ttl=settings.WEATHER_STALE_TTL,
+            ttl_remaining=None,
+        )
 
     # Get calendar cache metadata (default date range key is "default:default")
     calendar_fresh_meta = await cache.get_with_metadata("calendar:default:default:fresh")
@@ -194,25 +192,18 @@ async def get_metrics(cache: CacheDep, family_service: FamilyServiceDep):
             stale_ttl=settings.CALENDAR_STALE_TTL,
             ttl_remaining=calendar_fresh_meta["ttl_remaining"],
         )
-        calendar_value = calendar_fresh_meta["value"]
-        calendar_last_fetch = calendar_value.get("timestamp") if calendar_value else None
     elif calendar_stale_meta:
-        calendar_status = {
-            "status": "stale",
-            "age_seconds": settings.CALENDAR_CACHE_TTL + abs(calendar_stale_meta["ttl_remaining"]),
-            "fresh_ttl": settings.CALENDAR_CACHE_TTL,
-            "stale_ttl": settings.CALENDAR_STALE_TTL,
-        }
-        calendar_value = calendar_stale_meta["value"]
-        calendar_last_fetch = calendar_value.get("timestamp") if calendar_value else None
+        calendar_status = calculate_data_status(
+            fresh_ttl=settings.CALENDAR_CACHE_TTL,
+            stale_ttl=settings.CALENDAR_STALE_TTL,
+            ttl_remaining=calendar_stale_meta["ttl_remaining"],
+        )
     else:
-        calendar_status = {
-            "status": "missing",
-            "age_seconds": None,
-            "fresh_ttl": settings.CALENDAR_CACHE_TTL,
-            "stale_ttl": settings.CALENDAR_STALE_TTL,
-        }
-        calendar_last_fetch = None
+        calendar_status = calculate_data_status(
+            fresh_ttl=settings.CALENDAR_CACHE_TTL,
+            stale_ttl=settings.CALENDAR_STALE_TTL,
+            ttl_remaining=None,
+        )
 
     # Get per-member calendar metadata
     family_members = await family_service.get_all_members()
@@ -245,13 +236,9 @@ async def get_metrics(cache: CacheDep, family_service: FamilyServiceDep):
     cache_stats = cache.get_stats()
 
     return {
-        "weather": {
-            **weather_status,
-            "last_fetch": weather_last_fetch,
-        },
+        "weather": weather_status,
         "calendar": {
             **calendar_status,
-            "last_fetch": calendar_last_fetch,
             "members": member_metrics,
         },
         "network": network_health,
