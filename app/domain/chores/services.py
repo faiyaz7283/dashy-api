@@ -18,7 +18,6 @@ from app.domain.chores.models import (
     ChoreCategory,
     ChoreInstance,
     ChoreTag,
-    ExpirationBehavior,
     InstanceStatus,
     MasterChore,
     MasterChoreStatus,
@@ -314,7 +313,7 @@ class ChoresService:
         return await self.repository.update_instance(instance_id, updates)
 
     async def _validate_claim_assign(
-        self, instance: ChoreInstance, member_id: str
+        self, instance: ChoreInstance, member_id: UUID
     ) -> None:
         """Validate claim/assign to prevent duplicate member associations.
 
@@ -324,7 +323,7 @@ class ChoresService:
 
         Args:
             instance: The instance being claimed/assigned.
-            member_id: The member claiming/being assigned.
+            member_id: The member UUID claiming/being assigned.
 
         Raises:
             AssociationConflictError: If the member already has a member
@@ -334,7 +333,7 @@ class ChoresService:
             return
 
         association = await self.repository.get_association(instance.association_id)
-        if not association or not association.is_open_pool:
+        if not association or association.member_id is not None:
             return
 
         master = await self.repository.get_master_chore_by_id(instance.master_chore_id)
@@ -344,7 +343,7 @@ class ChoresService:
         existing = await self.repository.get_associations_by_master(master.id)
         member_assoc = [
             a for a in existing
-            if not a.is_open_pool and a.member_id == member_id
+            if a.member_id is not None and a.member_id == member_id
         ]
         if member_assoc:
             raise AssociationConflictError(
@@ -599,7 +598,6 @@ class ChoresService:
             association_id=association.id,
             master_chore_id=association.master_chore_id,
             member_id=association.member_id,
-            is_open_pool=association.is_open_pool,
             auto_claim=auto_claim,
             auto_assign=bool(auto_assign),
         )
@@ -656,7 +654,7 @@ class ChoresService:
         """Enforce collaborative rules for association creation.
 
         Rules:
-        - Open pool: only one per master (regardless of collaborative flag)
+        - Open pool (member_id is None): only one per master (regardless of collaborative flag)
         - Non-collaborative: only one association total (open pool or member)
         - Collaborative: multiple member associations allowed, one open pool max
         - Duplicate member: same member can't have two active associations
@@ -670,8 +668,10 @@ class ChoresService:
         Raises:
             AssociationConflictError: If any constraint is violated.
         """
-        if new_association.is_open_pool:
-            open_pool_exists = [a for a in existing_associations if a.is_open_pool]
+        is_open_pool = new_association.member_id is None
+
+        if is_open_pool:
+            open_pool_exists = [a for a in existing_associations if a.member_id is None]
             if open_pool_exists:
                 raise AssociationConflictError(
                     f"Master '{master.id}' already has an open pool association"
@@ -679,7 +679,7 @@ class ChoresService:
             # Non-collaborative: reject if any member association already exists
             if not master.is_collaborative:
                 member_associations = [
-                    a for a in existing_associations if not a.is_open_pool
+                    a for a in existing_associations if a.member_id is not None
                 ]
                 if member_associations:
                     raise AssociationConflictError(
@@ -691,7 +691,7 @@ class ChoresService:
         if not master.is_collaborative:
             member_associations = [
                 a for a in existing_associations
-                if not a.is_open_pool and a.member_id == new_association.member_id
+                if a.member_id is not None and a.member_id == new_association.member_id
             ]
             if member_associations:
                 raise AssociationConflictError(
@@ -708,7 +708,7 @@ class ChoresService:
         else:
             duplicate = [
                 a for a in existing_associations
-                if not a.is_open_pool and a.member_id == new_association.member_id
+                if a.member_id is not None and a.member_id == new_association.member_id
             ]
             if duplicate:
                 raise AssociationConflictError(
@@ -762,11 +762,20 @@ class ChoresService:
                 )
                 return None
 
-        # Handle one-time chores (no recurrence rule)
-        if master.recurrence_rule is None:
+        # Handle one-time chores
+        if master.frequency == "once":
             return await self._generate_one_time_instance(association_id, master)
 
-        rule = RecurrenceRule(**master.recurrence_rule)
+        # Build recurrence rule from flattened fields
+        rule = RecurrenceRule(
+            frequency=master.frequency,
+            frequency_interval=master.frequency_interval,
+            time=master.due_time or "00:00",
+            day_of_week=master.day_of_week,
+            day_of_month=master.day_of_month,
+            week_of_month=master.week_of_month,
+            month=master.month,
+        )
         today = datetime.now(settings.tz).date()
         now_time = datetime.now(settings.tz).strftime("%H:%M")
 
@@ -792,11 +801,11 @@ class ChoresService:
 
         period_start, period_end = calculate_period(rule, next_date)
 
-        if period_start is None or period_end is None:
+        if period_start is None:
             return None
 
         existing = await self.repository.get_instance_for_period(
-            association_id, period_start, period_end
+            association_id, period_start
         )
         if existing:
             return existing
@@ -805,15 +814,19 @@ class ChoresService:
         if not association:
             return None
 
+        # Set member_id if association has a member (not open pool)
+        member_id = association.member_id
+        assigned_by = None
+
         instance = ChoreInstance(
             id=uuid7(),
             master_chore_id=master.id,
             association_id=association_id,
             period_start=period_start,
             period_end=period_end,
+            member_id=member_id,
+            assigned_by=assigned_by,
             status=InstanceStatus.ACTIVE,
-            claimed_by=association.member_id if not association.is_open_pool else None,
-            assigned_to=association.member_id if not association.is_open_pool else None,
         )
 
         created = await self.repository.create_instance(instance)
@@ -828,7 +841,7 @@ class ChoresService:
             instance_id=created.id,
             association_id=association_id,
             period_start=period_start.isoformat(),
-            period_end=period_end.isoformat(),
+            period_end=period_end.isoformat() if period_end else None,
         )
 
         return created
@@ -868,7 +881,7 @@ class ChoresService:
 
         # Check if instance already exists for this date
         existing = await self.repository.get_instance_for_period(
-            association_id, period_date, period_date
+            association_id, period_date
         )
         if existing:
             return existing
@@ -879,9 +892,9 @@ class ChoresService:
             association_id=association_id,
             period_start=period_date,
             period_end=period_date,
+            member_id=association.member_id,
+            assigned_by=None,
             status=InstanceStatus.ACTIVE,
-            claimed_by=association.member_id if not association.is_open_pool else None,
-            assigned_to=association.member_id if not association.is_open_pool else None,
         )
 
         created = await self.repository.create_instance(instance)
@@ -941,10 +954,7 @@ class ChoresService:
     async def process_expired_instances(self) -> list[ChoreInstance]:
         """Process instances past their period_end with non-completed status.
 
-        Applies the master's expiration_behavior to each expired instance:
-        - DISAPPEAR: Delete the instance
-        - STAY_VISIBLE: Mark as MISSED, leave instance visible
-        - CONVERT_TO_OPEN: Clear assignment, move to open pool
+        Marks all expired instances as MISSED.
 
         Returns:
             List of processed ChoreInstance entities.
@@ -956,57 +966,20 @@ class ChoresService:
             return []
 
         processed: list[ChoreInstance] = []
-        masters_cache: dict[UUID, MasterChore | None] = {}
 
         for instance in expired:
-            master_id = instance.master_chore_id
-            if master_id not in masters_cache:
-                masters_cache[master_id] = await self.repository.get_master_chore_by_id(master_id)
-
-            master = masters_cache[master_id]
-            if not master:
-                continue
-
-            behavior = master.expiration_behavior
-
-            if behavior == ExpirationBehavior.DISAPPEAR:
-                await self.repository.delete_instance(instance.id)
-                logger.info(
-                    "process_expired_disappear",
-                    instance_id=instance.id,
-                    master_id=master_id,
-                )
-
-            elif behavior == ExpirationBehavior.STAY_VISIBLE:
-                await self.repository.update_instance(
-                    instance.id,
-                    {
-                        "status": InstanceStatus.MISSED,
-                        "updated_at": datetime.now(UTC),
-                    },
-                )
-                logger.info(
-                    "process_expired_stay_visible",
-                    instance_id=instance.id,
-                    master_id=master_id,
-                )
-
-            elif behavior == ExpirationBehavior.CONVERT_TO_OPEN:
-                await self.repository.update_instance(
-                    instance.id,
-                    {
-                        "claimed_by": None,
-                        "assigned_to": None,
-                        "assigned_by": None,
-                        "updated_at": datetime.now(UTC),
-                    },
-                )
-                logger.info(
-                    "process_expired_convert_to_open",
-                    instance_id=instance.id,
-                    master_id=master_id,
-                )
-
+            await self.repository.update_instance(
+                instance.id,
+                {
+                    "status": InstanceStatus.MISSED,
+                    "updated_at": datetime.now(UTC),
+                },
+            )
+            logger.info(
+                "process_expired_missed",
+                instance_id=instance.id,
+                master_id=instance.master_chore_id,
+            )
             processed.append(instance)
 
         if processed:
