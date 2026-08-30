@@ -32,7 +32,6 @@ from app.domain.chores.models import (
     ChoreCategory,
     ChoreInstance,
     ChoreTag,
-    ExpirationBehavior,
     InstanceStatus,
     MasterChore,
     MasterChoreStatus,
@@ -91,11 +90,15 @@ def _master_to_response(
         category=category_resp,
         tags=[_tag_to_response(t) for t in master.tags],
         difficulty=master.difficulty,
-        recurrence_rule=master.recurrence_rule,
+        frequency=master.frequency,
+        frequency_interval=master.frequency_interval,
+        day_of_week=master.day_of_week,
+        day_of_month=master.day_of_month,
+        week_of_month=master.week_of_month,
+        month=master.month,
         estimated_minutes=master.estimated_minutes,
         due_time=master.due_time,
         due_date=master.due_date,
-        expiration_behavior=master.expiration_behavior.value,
         end_date=master.end_date,
         max_occurrences=master.max_occurrences,
         occurrence_count=master.occurrence_count,
@@ -124,11 +127,9 @@ def _instance_to_response(instance: ChoreInstance) -> ChoreInstanceResponse:
         association_id=instance.association_id,
         period_start=instance.period_start,
         period_end=instance.period_end,
-        status=instance.status.value,
-        claimed_by=instance.claimed_by,
-        assigned_to=instance.assigned_to,
+        member_id=instance.member_id,
         assigned_by=instance.assigned_by,
-        completed_by=instance.completed_by,
+        status=instance.status.value,
         started_at=instance.started_at,
         completed_at=instance.completed_at,
         created_at=instance.created_at,
@@ -149,7 +150,6 @@ def _association_to_response(association: ChoreAssociation) -> AssociationRespon
         id=association.id,
         master_chore_id=association.master_chore_id,
         member_id=association.member_id,
-        is_open_pool=association.is_open_pool,
         created_by=association.created_by,
         created_at=association.created_at,
         updated_at=association.updated_at,
@@ -246,21 +246,21 @@ async def create_master_chore(
         id=uuid7(),
         name=body.name,
         category_id=body.category_id,
+        created_by=body.created_by,
         difficulty=body.difficulty,
-        recurrence_rule=body.recurrence_rule,
+        frequency=body.frequency,
+        frequency_interval=body.frequency_interval,
+        day_of_week=body.day_of_week,
+        day_of_month=body.day_of_month,
+        week_of_month=body.week_of_month,
+        month=body.month,
         estimated_minutes=body.estimated_minutes,
         due_time=body.due_time,
         due_date=body.due_date,
-        expiration_behavior=(
-            ExpirationBehavior(body.expiration_behavior)
-            if body.expiration_behavior
-            else ExpirationBehavior.DISAPPEAR
-        ),
         end_date=body.end_date,
         max_occurrences=body.max_occurrences,
         conditions=body.conditions,
         is_collaborative=body.is_collaborative,
-        created_by=body.created_by,
     )
 
     created = await chores_service.create_master_chore(
@@ -301,16 +301,24 @@ async def update_master_chore(
         updates["category_id"] = body.category_id
     if body.difficulty is not None:
         updates["difficulty"] = body.difficulty
-    if body.recurrence_rule is not None:
-        updates["recurrence_rule"] = body.recurrence_rule
+    if body.frequency is not None:
+        updates["frequency"] = body.frequency
+    if body.frequency_interval is not None:
+        updates["frequency_interval"] = body.frequency_interval
+    if body.day_of_week is not None:
+        updates["day_of_week"] = body.day_of_week
+    if body.day_of_month is not None:
+        updates["day_of_month"] = body.day_of_month
+    if body.week_of_month is not None:
+        updates["week_of_month"] = body.week_of_month
+    if body.month is not None:
+        updates["month"] = body.month
     if body.estimated_minutes is not None:
         updates["estimated_minutes"] = body.estimated_minutes
     if body.due_time is not None:
         updates["due_time"] = body.due_time
     if body.due_date is not None:
         updates["due_date"] = body.due_date
-    if body.expiration_behavior is not None:
-        updates["expiration_behavior"] = ExpirationBehavior(body.expiration_behavior)
     if body.end_date is not None:
         updates["end_date"] = body.end_date
     if body.max_occurrences is not None:
@@ -385,7 +393,6 @@ async def create_association(
         id=uuid7(),
         master_chore_id=body.master_chore_id,
         member_id=body.member_id,
-        is_open_pool=body.is_open_pool,
         created_by=body.created_by,
     )
 
@@ -404,7 +411,6 @@ async def create_association(
         id=created.id,
         master_chore_id=created.master_chore_id,
         member_id=created.member_id,
-        is_open_pool=created.is_open_pool,
         created_by=created.created_by,
         created_at=created.created_at,
         updated_at=created.updated_at,

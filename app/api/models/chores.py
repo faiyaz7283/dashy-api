@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.domain.chores.models import ExpirationBehavior, InstanceStatus, MasterChoreStatus
+from app.domain.chores.models import InstanceStatus, MasterChoreStatus
 
 
 class ChoreCategoryResponse(BaseModel):
@@ -44,17 +44,21 @@ class MasterChoreResponse(BaseModel):
         category: The chore's category.
         tags: Associated tags.
         difficulty: Difficulty level (1-5).
-        recurrence_rule: Recurrence pattern config (JSON).
+        frequency: Recurrence type (once, daily, weekly, monthly, yearly).
+        frequency_interval: Every N days/weeks/months/years.
+        day_of_week: Days of week for weekly/monthly (0=Mon..6=Sun).
+        day_of_month: Day of month for monthly/yearly (1-31).
+        week_of_month: Week of month for monthly (1-5).
+        month: Month for yearly (1-12).
         estimated_minutes: Optional time estimate.
         due_time: Optional time-of-day deadline.
         due_date: Optional specific due date.
-        expiration_behavior: What happens when period ends.
         end_date: Stop generating after this date.
         max_occurrences: Stop after N total instances.
         occurrence_count: Total instances generated so far.
         conditions: Conditional chore conditions (JSON).
         is_collaborative: Whether multiple members can have instances.
-        created_by: Member ID of the creator.
+        created_by: Member UUID of the creator.
         status: Current lifecycle status.
         created_at: ISO datetime of creation.
         updated_at: ISO datetime of last update.
@@ -66,17 +70,21 @@ class MasterChoreResponse(BaseModel):
     category: ChoreCategoryResponse
     tags: list[ChoreTagResponse]
     difficulty: int
-    recurrence_rule: dict | None = None
+    frequency: str
+    frequency_interval: int
+    day_of_week: list[int] | None = None
+    day_of_month: int | None = None
+    week_of_month: int | None = None
+    month: int | None = None
     estimated_minutes: int | None = None
     due_time: str | None = None
     due_date: date | None = None
-    expiration_behavior: str
     end_date: date | None = None
     max_occurrences: int | None = None
     occurrence_count: int = 0
     conditions: dict | None = None
     is_collaborative: bool = False
-    created_by: str
+    created_by: UUID
     status: str
     created_at: datetime
     updated_at: datetime
@@ -91,12 +99,10 @@ class ChoreInstanceResponse(BaseModel):
         master_chore_id: Parent master chore ID.
         association_id: FK to the association that generated this instance.
         period_start: Period start date (ISO string).
-        period_end: Period end date (ISO string).
+        period_end: Period end date (ISO string, None = no deadline).
+        member_id: Member UUID who owns this instance.
+        assigned_by: Member UUID who assigned (None = self-claimed).
         status: Current lifecycle status.
-        claimed_by: Member ID who claimed this instance.
-        assigned_to: Member ID who was assigned.
-        assigned_by: Member ID who made the assignment.
-        completed_by: Member ID who marked complete.
         started_at: ISO datetime when work began.
         completed_at: ISO datetime when marked complete.
         created_at: ISO datetime of creation.
@@ -105,14 +111,12 @@ class ChoreInstanceResponse(BaseModel):
 
     id: UUID
     master_chore_id: UUID
-    association_id: UUID | None = None
-    period_start: date | None = None
+    association_id: UUID
+    period_start: date
     period_end: date | None = None
+    member_id: UUID
+    assigned_by: UUID | None = None
     status: str
-    claimed_by: str | None = None
-    assigned_to: str | None = None
-    assigned_by: str | None = None
-    completed_by: str | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
     created_at: datetime
@@ -125,9 +129,8 @@ class AssociationResponse(BaseModel):
     Attributes:
         id: Unique identifier.
         master_chore_id: Parent master chore ID.
-        member_id: Member ID (None for open pool).
-        is_open_pool: Whether this is an open pool.
-        created_by: Member ID who created this association.
+        member_id: Member UUID (None for open pool).
+        created_by: Member UUID who created this association.
         created_at: ISO datetime of creation.
         updated_at: ISO datetime of last update.
         removed_at: ISO datetime of soft-delete (None if active).
@@ -135,9 +138,8 @@ class AssociationResponse(BaseModel):
 
     id: UUID
     master_chore_id: UUID
-    member_id: str | None = None
-    is_open_pool: bool = False
-    created_by: str
+    member_id: UUID | None = None
+    created_by: UUID
     created_at: datetime
     updated_at: datetime
     removed_at: datetime | None = None
@@ -152,9 +154,8 @@ class AssociationCreateResponse(BaseModel):
     Attributes:
         id: Unique identifier.
         master_chore_id: Parent master chore ID.
-        member_id: Member ID (None for open pool).
-        is_open_pool: Whether this is an open pool.
-        created_by: Member ID who created this association.
+        member_id: Member UUID (None for open pool).
+        created_by: Member UUID who created this association.
         created_at: ISO datetime of creation.
         updated_at: ISO datetime of last update.
         removed_at: ISO datetime of soft-delete (None if active).
@@ -163,9 +164,8 @@ class AssociationCreateResponse(BaseModel):
 
     id: UUID
     master_chore_id: UUID
-    member_id: str | None = None
-    is_open_pool: bool = False
-    created_by: str
+    member_id: UUID | None = None
+    created_by: UUID
     created_at: datetime
     updated_at: datetime
     removed_at: datetime | None = None
@@ -198,45 +198,40 @@ class CreateMasterChoreRequest(BaseModel):
         category_id: Category to assign.
         tag_ids: Tags to associate.
         difficulty: Difficulty level (1-5).
-        recurrence_rule: Recurrence pattern config (JSON).
+        frequency: Recurrence type (once, daily, weekly, monthly, yearly).
+        frequency_interval: Every N days/weeks/months/years.
+        day_of_week: Days of week for weekly/monthly (0=Mon..6=Sun).
+        day_of_month: Day of month for monthly/yearly (1-31).
+        week_of_month: Week of month for monthly (1-5).
+        month: Month for yearly (1-12).
         estimated_minutes: Optional time estimate.
         due_time: Optional time-of-day deadline.
         due_date: Optional specific due date.
-        expiration_behavior: What happens when period ends.
         end_date: Stop generating after this date.
         max_occurrences: Stop after N total instances.
         conditions: Conditional chore conditions (JSON).
         is_collaborative: Whether multiple members can have instances.
-        created_by: Member ID of the creator.
+        created_by: Member UUID of the creator.
     """
 
     name: str = Field(min_length=1, max_length=200)
     category_id: UUID
     tag_ids: list[UUID] = Field(default_factory=list)
     difficulty: int = Field(default=1, ge=1, le=5)
-    recurrence_rule: dict | None = None
+    frequency: str = Field(default="once")
+    frequency_interval: int = Field(default=1, ge=1)
+    day_of_week: list[int] | None = None
+    day_of_month: int | None = Field(default=None, ge=1, le=31)
+    week_of_month: int | None = Field(default=None, ge=1, le=5)
+    month: int | None = Field(default=None, ge=1, le=12)
     estimated_minutes: int | None = None
     due_time: str | None = None
     due_date: date | None = None
-    expiration_behavior: str = Field(default="disappear")
     end_date: date | None = None
-    max_occurrences: int | None = None
+    max_occurrences: int | None = Field(default=None, ge=1)
     conditions: dict | None = None
     is_collaborative: bool = False
-    created_by: str
-
-    @field_validator("expiration_behavior")
-    @classmethod
-    def validate_expiration_behavior(cls, v: str) -> str:
-        """Validate that expiration_behavior is a valid enum value."""
-        try:
-            ExpirationBehavior(v)
-        except ValueError:
-            valid_values = [e.value for e in ExpirationBehavior]
-            raise ValueError(
-                f"Invalid expiration_behavior: {v}. Must be one of: {', '.join(valid_values)}"
-            ) from None
-        return v
+    created_by: UUID
 
 
 class UpdateMasterChoreRequest(BaseModel):
@@ -249,11 +244,15 @@ class UpdateMasterChoreRequest(BaseModel):
         category_id: Category to assign.
         tag_ids: Tags to associate.
         difficulty: Difficulty level (1-5).
-        recurrence_rule: Recurrence pattern config (JSON).
+        frequency: Recurrence type (once, daily, weekly, monthly, yearly).
+        frequency_interval: Every N days/weeks/months/years.
+        day_of_week: Days of week for weekly/monthly (0=Mon..6=Sun).
+        day_of_month: Day of month for monthly/yearly (1-31).
+        week_of_month: Week of month for monthly (1-5).
+        month: Month for yearly (1-12).
         estimated_minutes: Optional time estimate.
         due_time: Optional time-of-day deadline.
         due_date: Optional specific due date.
-        expiration_behavior: What happens when period ends.
         end_date: Stop generating after this date.
         max_occurrences: Stop after N total instances.
         conditions: Conditional chore conditions (JSON).
@@ -265,31 +264,20 @@ class UpdateMasterChoreRequest(BaseModel):
     category_id: UUID | None = None
     tag_ids: list[UUID] | None = None
     difficulty: int | None = Field(default=None, ge=1, le=5)
-    recurrence_rule: dict | None = None
+    frequency: str | None = None
+    frequency_interval: int | None = Field(default=None, ge=1)
+    day_of_week: list[int] | None = None
+    day_of_month: int | None = Field(default=None, ge=1, le=31)
+    week_of_month: int | None = Field(default=None, ge=1, le=5)
+    month: int | None = Field(default=None, ge=1, le=12)
     estimated_minutes: int | None = None
     due_time: str | None = None
     due_date: date | None = None
-    expiration_behavior: str | None = None
     end_date: date | None = None
-    max_occurrences: int | None = None
+    max_occurrences: int | None = Field(default=None, ge=1)
     conditions: dict | None = None
     is_collaborative: bool | None = None
     status: str | None = None
-
-    @field_validator("expiration_behavior")
-    @classmethod
-    def validate_expiration_behavior(cls, v: str | None) -> str | None:
-        """Validate that expiration_behavior is a valid enum value."""
-        if v is None:
-            return v
-        try:
-            ExpirationBehavior(v)
-        except ValueError:
-            valid_values = [e.value for e in ExpirationBehavior]
-            raise ValueError(
-                f"Invalid expiration_behavior: {v}. Must be one of: {', '.join(valid_values)}"
-            ) from None
-        return v
 
     @field_validator("status")
     @classmethod
@@ -311,10 +299,10 @@ class AutoAssignConfig(BaseModel):
     """Configuration for auto-assign on association creation.
 
     Attributes:
-        assigner_id: Member ID making the assignment.
+        assigner_id: Member UUID making the assignment.
     """
 
-    assigner_id: str
+    assigner_id: UUID
 
 
 class CreateAssociationRequest(BaseModel):
@@ -322,17 +310,15 @@ class CreateAssociationRequest(BaseModel):
 
     Attributes:
         master_chore_id: Master chore to associate.
-        member_id: Member to associate (None for open pool).
-        is_open_pool: Whether this is an open pool.
-        created_by: Member ID creating the association.
+        member_id: Member UUID to associate (None for open pool).
+        created_by: Member UUID creating the association.
         auto_claim: If True, automatically claim the generated instance for member_id.
         auto_assign: If provided, automatically assign the generated instance.
     """
 
     master_chore_id: UUID
-    member_id: str | None = None
-    is_open_pool: bool = False
-    created_by: str
+    member_id: UUID | None = None
+    created_by: UUID
     auto_claim: bool = False
     auto_assign: AutoAssignConfig | None = None
 
@@ -397,22 +383,22 @@ class ClaimInstanceRequest(BaseModel):
     """Request body for claiming a chore instance.
 
     Attributes:
-        member_id: Member ID claiming the instance.
+        member_id: Member UUID claiming the instance.
     """
 
-    member_id: str
+    member_id: UUID
 
 
 class AssignInstanceRequest(BaseModel):
     """Request body for assigning a chore instance.
 
     Attributes:
-        assignee_id: Member ID being assigned.
-        assigner_id: Member ID making the assignment.
+        assignee_id: Member UUID being assigned.
+        assigner_id: Member UUID making the assignment.
     """
 
-    assignee_id: str
-    assigner_id: str
+    assignee_id: UUID
+    assigner_id: UUID
 
 
 class UpdateInstanceStatusRequest(BaseModel):
@@ -420,11 +406,11 @@ class UpdateInstanceStatusRequest(BaseModel):
 
     Attributes:
         status: Target status value.
-        actor_id: Member ID performing the action.
+        actor_id: Member UUID performing the action.
     """
 
     status: str
-    actor_id: str
+    actor_id: UUID
 
     @field_validator("status")
     @classmethod
