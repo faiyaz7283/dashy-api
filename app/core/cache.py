@@ -238,6 +238,10 @@ class Cache:
                 service_name=service_name,
                 msg="Fresh cache expired, serving stale data",
             )
+            # Trigger background refresh (don't wait for it)
+            asyncio.create_task(
+                self._background_refresh(key, fetcher, fresh_ttl, stale_ttl, retry_config, service_name)
+            )
             return stale_data
 
         # 3. Fetch with retry
@@ -306,6 +310,48 @@ class Cache:
             service_name=service_name,
             detail=str(last_error) if last_error else None,
         ) from last_error
+
+    async def _background_refresh(
+        self,
+        key: str,
+        fetcher: Callable[[], Awaitable[Any]],
+        fresh_ttl: int,
+        stale_ttl: int,
+        retry_config: RetryConfig,
+        service_name: str,
+    ) -> None:
+        """Background task to refresh stale cache data.
+
+        This is triggered when serving stale data to ensure fresh data is fetched
+        for the next request. Errors are logged but don't affect the current request.
+
+        Args:
+            key: Base cache key.
+            fetcher: Async callable that fetches fresh data.
+            fresh_ttl: TTL for fresh cache entry.
+            stale_ttl: TTL for stale cache entry.
+            retry_config: Retry configuration.
+            service_name: Name of the upstream service.
+        """
+        fresh_key = f"{key}:fresh"
+        stale_key = f"{key}:stale"
+
+        try:
+            result = await fetcher()
+            await self.set(fresh_key, result, fresh_ttl)
+            await self.set(stale_key, result, stale_ttl)
+            logger.info(
+                "background_refresh_success",
+                key=key,
+                service_name=service_name,
+            )
+        except Exception as e:
+            logger.warning(
+                "background_refresh_failed",
+                key=key,
+                service_name=service_name,
+                error=str(e),
+            )
 
     def get_stats(self) -> CacheStats:
         """Get cache statistics.
