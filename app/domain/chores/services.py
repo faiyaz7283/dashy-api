@@ -810,6 +810,18 @@ class ChoresService:
         if existing:
             return existing
 
+        # Archive old instances from previous periods before creating new one
+        archived_count = await self.repository.archive_old_instances_for_association(
+            association_id, period_start
+        )
+        if archived_count > 0:
+            logger.info(
+                "archive_old_instances",
+                association_id=association_id,
+                archived_count=archived_count,
+                before_period_start=period_start.isoformat(),
+            )
+
         association = await self.repository.get_association(association_id)
         if not association:
             return None

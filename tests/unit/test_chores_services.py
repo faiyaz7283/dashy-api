@@ -1,6 +1,6 @@
 """Unit tests for chores domain services."""
 
-from datetime import date
+from datetime import date, datetime, timedelta, UTC
 from unittest.mock import AsyncMock
 
 import pytest
@@ -8,6 +8,7 @@ from uuid6 import uuid7
 
 from app.domain.chores.models import (
     ChoreAssociation,
+    ChoreInstance,
     InstanceStatus,
     MasterChore,
     MasterChoreStatus,
@@ -683,6 +684,78 @@ class TestInstanceGeneration:
         updated_master = await service.repository.get_master_chore_by_id(gen5_master_id)
         assert updated_master is not None
         assert updated_master.occurrence_count == 1
+
+    @pytest.mark.asyncio
+    async def test_generate_instance_archives_old_instances(
+        self, service: ChoresService
+    ) -> None:
+        """Test that generating a new instance archives old instances from previous periods."""
+        # Create a master chore with daily frequency
+        archive_master_id = uuid7()
+        master = MasterChore(
+            id=archive_master_id,
+            name="Archive Test",
+            category_id=_CAT_KITCHEN,
+            frequency="daily",
+            due_time="18:00",
+            created_by=_MEMBER_FAIYAZ,
+        )
+        await service.create_master_chore(master, tag_ids=[])
+
+        # Create an association (this auto-generates an instance for today)
+        archive_assoc_id = uuid7()
+        association = ChoreAssociation(
+            id=archive_assoc_id,
+            master_chore_id=archive_master_id,
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
+        )
+        await service.create_association(association)
+
+        # Delete the auto-generated instance for today
+        today_instances = await service.repository.get_instances_by_association(
+            archive_assoc_id, active_only=False
+        )
+        for inst in today_instances:
+            await service.repository.delete_instance(inst.id)
+
+        # Manually create an old instance from yesterday with ACTIVE status
+        yesterday = datetime.now(UTC).date() - timedelta(days=1)
+        old_instance = ChoreInstance(
+            id=uuid7(),
+            master_chore_id=archive_master_id,
+            association_id=archive_assoc_id,
+            period_start=yesterday,
+            period_end=yesterday,
+            member_id=_MEMBER_ARYA,
+            status=InstanceStatus.ACTIVE,
+        )
+        await service.repository.create_instance(old_instance)
+
+        # Verify the old instance exists and is ACTIVE
+        instances_before = await service.repository.get_instances_by_association(
+            archive_assoc_id, active_only=False
+        )
+        assert len(instances_before) == 1
+        assert instances_before[0].period_start == yesterday
+        assert instances_before[0].status == InstanceStatus.ACTIVE
+
+        # Generate a new instance for today
+        new_instance = await service.generate_instance_for_association(archive_assoc_id)
+        assert new_instance is not None
+        assert new_instance.period_start == datetime.now(UTC).date()
+
+        # Verify the old instance is now ARCHIVED
+        instances_after = await service.repository.get_instances_by_association(
+            archive_assoc_id, active_only=False
+        )
+        assert len(instances_after) == 2
+        old_instance_after = next(i for i in instances_after if i.period_start == yesterday)
+        assert old_instance_after.status == InstanceStatus.ARCHIVED
+
+        # Verify the new instance is ACTIVE
+        new_instance_after = next(i for i in instances_after if i.period_start == new_instance.period_start)
+        assert new_instance_after.status == InstanceStatus.ACTIVE
 
 
 class TestSafetyNet:

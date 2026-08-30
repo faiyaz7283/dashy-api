@@ -274,6 +274,26 @@ class ChoresRepository(Protocol):
         """
         ...
 
+    async def archive_old_instances_for_association(
+        self, association_id: UUID, before_period_start: date
+    ) -> int:
+        """Archive old instances from previous periods for an association.
+
+        Sets status to ARCHIVED for instances with period_start < before_period_start
+        and status in (ACTIVE, IN_PROGRESS, MISSED, OVERDUE).
+
+        Called before generating a new instance to ensure old instances from previous
+        cycles don't accumulate in the database.
+
+        Args:
+            association_id: FK to the association.
+            before_period_start: Archive instances with period_start before this date.
+
+        Returns:
+            Number of instances archived.
+        """
+        ...
+
     async def get_instance_for_period(
         self,
         association_id: UUID,

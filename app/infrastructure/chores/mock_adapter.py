@@ -713,6 +713,38 @@ class MockChoresRepository:
                 archived_count += 1
         return archived_count
 
+    async def archive_old_instances_for_association(
+        self, association_id: UUID, before_period_start: date
+    ) -> int:
+        """Archive old instances from previous periods for an association.
+
+        Sets status to ARCHIVED for instances with period_start < before_period_start
+        and status in (ACTIVE, IN_PROGRESS, MISSED, OVERDUE).
+
+        Args:
+            association_id: FK to the association.
+            before_period_start: Archive instances with period_start before this date.
+
+        Returns:
+            Number of instances archived.
+        """
+        archived_count = 0
+        for instance in self._instances:
+            if (
+                instance.association_id == association_id
+                and instance.period_start < before_period_start
+                and instance.status in (
+                    InstanceStatus.ACTIVE,
+                    InstanceStatus.IN_PROGRESS,
+                    InstanceStatus.MISSED,
+                    InstanceStatus.OVERDUE,
+                )
+            ):
+                instance.status = InstanceStatus.ARCHIVED
+                instance.updated_at = datetime.now(UTC)
+                archived_count += 1
+        return archived_count
+
     async def get_instance_for_period(
         self,
         association_id: UUID,

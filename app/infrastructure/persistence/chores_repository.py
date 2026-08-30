@@ -538,6 +538,47 @@ class ChoresRepositoryImpl:
         await self.session.commit()
         return archived_count
 
+    async def archive_old_instances_for_association(
+        self, association_id: UUID, before_period_start: date
+    ) -> int:
+        """Archive old instances from previous periods for an association.
+
+        Sets status to ARCHIVED for instances with period_start < before_period_start
+        and status in (ACTIVE, IN_PROGRESS, MISSED, OVERDUE).
+
+        Called before generating a new instance to ensure old instances from previous
+        cycles don't accumulate in the database.
+
+        Args:
+            association_id: FK to the association.
+            before_period_start: Archive instances with period_start before this date.
+
+        Returns:
+            Number of instances archived.
+        """
+        statement = select(ChoreInstanceDB).where(
+            ChoreInstanceDB.association_id == association_id,
+            ChoreInstanceDB.period_start < before_period_start,
+            ChoreInstanceDB.status.in_([
+                InstanceStatus.ACTIVE.value,
+                InstanceStatus.IN_PROGRESS.value,
+                InstanceStatus.MISSED.value,
+                InstanceStatus.OVERDUE.value,
+            ]),
+        )
+        result = await self.session.execute(statement)
+        db_instances = result.scalars().all()
+
+        archived_count = 0
+        for db_instance in db_instances:
+            db_instance.status = InstanceStatus.ARCHIVED.value
+            db_instance.updated_at = datetime.now(UTC)
+            self.session.add(db_instance)
+            archived_count += 1
+
+        await self.session.commit()
+        return archived_count
+
     async def get_instance_for_period(
         self,
         association_id: UUID,
