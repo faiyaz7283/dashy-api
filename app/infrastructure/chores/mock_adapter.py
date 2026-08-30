@@ -15,7 +15,6 @@ from app.domain.chores.models import (
     ChoreCategory,
     ChoreInstance,
     ChoreTag,
-    ExpirationBehavior,
     InstanceStatus,
     MasterChore,
     MasterChoreStatus,
@@ -33,6 +32,12 @@ _TAG_PHYSICAL = uuid7()
 _TAG_MESSY = uuid7()
 _TAG_FOCUS = uuid7()
 _TAG_TEAMWORK = uuid7()
+
+# Family member UUIDs (mock)
+_MEMBER_FAIYAZ = uuid7()
+_MEMBER_TRISHA = uuid7()
+_MEMBER_ARYA = uuid7()
+_MEMBER_RAYA = uuid7()
 
 _MASTER_001 = uuid7()
 _MASTER_002 = uuid7()
@@ -84,12 +89,13 @@ _MASTER_1 = MasterChore(
     id=_MASTER_001,
     name="Wipe Kitchen Counter",
     category_id=_CAT_KITCHEN,
+    created_by=_MEMBER_FAIYAZ,
     tags=[_SAMPLE_TAGS[0]],
     difficulty=1,
-    recurrence_rule={"frequency": "daily", "time": "18:00"},
+    frequency="daily",
+    frequency_interval=1,
+    due_time="18:00",
     estimated_minutes=5,
-    expiration_behavior=ExpirationBehavior.STAY_VISIBLE,
-    created_by="faiyaz",
     status=MasterChoreStatus.ACTIVE,
     created_at=_NOW - timedelta(days=14),
     updated_at=_NOW - timedelta(days=2),
@@ -99,12 +105,13 @@ _MASTER_2 = MasterChore(
     id=_MASTER_002,
     name="Clean Bathroom Sink",
     category_id=_CAT_BATHROOM,
+    created_by=_MEMBER_TRISHA,
     tags=[_SAMPLE_TAGS[0], _SAMPLE_TAGS[2]],
     difficulty=2,
-    recurrence_rule={"frequency": "daily", "time": "20:00"},
+    frequency="daily",
+    frequency_interval=1,
+    due_time="20:00",
     estimated_minutes=10,
-    expiration_behavior=ExpirationBehavior.STAY_VISIBLE,
-    created_by="trisha",
     status=MasterChoreStatus.ACTIVE,
     created_at=_NOW - timedelta(days=14),
     updated_at=_NOW - timedelta(days=1),
@@ -114,12 +121,14 @@ _MASTER_3 = MasterChore(
     id=_MASTER_003,
     name="Rake Leaves in Yard",
     category_id=_CAT_OUTDOOR,
+    created_by=_MEMBER_FAIYAZ,
     tags=[_SAMPLE_TAGS[1]],
     difficulty=3,
-    recurrence_rule={"frequency": "weekly", "day_of_week": 0, "time": "10:00"},
+    frequency="weekly",
+    frequency_interval=1,
+    day_of_week=[0],  # Monday
+    due_time="10:00",
     estimated_minutes=30,
-    expiration_behavior=ExpirationBehavior.CONVERT_TO_OPEN,
-    created_by="faiyaz",
     status=MasterChoreStatus.ACTIVE,
     created_at=_NOW - timedelta(days=10),
     updated_at=_NOW - timedelta(days=3),
@@ -129,12 +138,14 @@ _MASTER_4 = MasterChore(
     id=_MASTER_004,
     name="Fold Laundry",
     category_id=_CAT_LAUNDRY,
+    created_by=_MEMBER_TRISHA,
     tags=[_SAMPLE_TAGS[0], _SAMPLE_TAGS[3]],
     difficulty=2,
-    recurrence_rule={"frequency": "weekly", "day_of_week": 6, "time": "14:00"},
+    frequency="weekly",
+    frequency_interval=1,
+    day_of_week=[6],  # Sunday
+    due_time="14:00",
     estimated_minutes=20,
-    expiration_behavior=ExpirationBehavior.STAY_VISIBLE,
-    created_by="trisha",
     status=MasterChoreStatus.ACTIVE,
     created_at=_NOW - timedelta(days=7),
     updated_at=_NOW - timedelta(days=1),
@@ -144,12 +155,14 @@ _MASTER_5 = MasterChore(
     id=_MASTER_005,
     name="Organize Bookshelf",
     category_id=_CAT_GENERAL,
+    created_by=_MEMBER_ARYA,
     tags=[_SAMPLE_TAGS[3]],
     difficulty=2,
-    recurrence_rule={"frequency": "monthly", "day_of_month": 15, "time": "11:00"},
+    frequency="monthly",
+    frequency_interval=1,
+    day_of_month=15,
+    due_time="11:00",
     estimated_minutes=45,
-    expiration_behavior=ExpirationBehavior.STAY_VISIBLE,
-    created_by="arya",
     status=MasterChoreStatus.ACTIVE,
     created_at=_NOW - timedelta(days=1),
     updated_at=_NOW - timedelta(days=1),
@@ -159,12 +172,13 @@ _MASTER_6 = MasterChore(
     id=_MASTER_006,
     name="Take Out Trash",
     category_id=_CAT_KITCHEN,
+    created_by=_MEMBER_FAIYAZ,
     tags=[_SAMPLE_TAGS[0]],
     difficulty=1,
-    recurrence_rule={"frequency": "daily", "time": "19:00"},
+    frequency="daily",
+    frequency_interval=1,
+    due_time="19:00",
     estimated_minutes=5,
-    expiration_behavior=ExpirationBehavior.STAY_VISIBLE,
-    created_by="faiyaz",
     status=MasterChoreStatus.ACTIVE,
     created_at=_NOW - timedelta(days=14),
     updated_at=_NOW - timedelta(days=7),
@@ -174,18 +188,19 @@ _MASTER_7_CONDITIONAL = MasterChore(
     id=_MASTER_007,
     name="Shovel Snow",
     category_id=_CAT_OUTDOOR,
+    created_by=_MEMBER_FAIYAZ,
     tags=[_SAMPLE_TAGS[1]],
     difficulty=4,
-    recurrence_rule={"frequency": "daily", "time": "08:00"},
+    frequency="daily",
+    frequency_interval=1,
+    due_time="08:00",
     estimated_minutes=45,
-    expiration_behavior=ExpirationBehavior.DISAPPEAR,
     conditions={
         "logic": "and",
         "conditions": [
             {"type": "weather", "metric": "snowfall", "operator": "gt", "value": 0}
         ],
     },
-    created_by="faiyaz",
     status=MasterChoreStatus.ACTIVE,
     created_at=_NOW - timedelta(days=5),
     updated_at=_NOW - timedelta(days=5),
@@ -206,48 +221,48 @@ _ASSOCIATIONS = [
     ChoreAssociation(
         id=_ASSOC_001,
         master_chore_id=_MASTER_001,
-        member_id="arya",
-        created_by="faiyaz",
+        member_id=_MEMBER_ARYA,
+        created_by=_MEMBER_FAIYAZ,
         created_at=_NOW - timedelta(days=10),
         updated_at=_NOW - timedelta(days=10),
     ),
     ChoreAssociation(
         id=_ASSOC_002,
         master_chore_id=_MASTER_003,
-        is_open_pool=True,
-        created_by="faiyaz",
+        member_id=None,  # Open pool
+        created_by=_MEMBER_FAIYAZ,
         created_at=_NOW - timedelta(days=8),
         updated_at=_NOW - timedelta(days=8),
     ),
     ChoreAssociation(
         id=_ASSOC_003,
         master_chore_id=_MASTER_002,
-        member_id="arya",
-        created_by="trisha",
+        member_id=_MEMBER_ARYA,
+        created_by=_MEMBER_TRISHA,
         created_at=_NOW - timedelta(days=7),
         updated_at=_NOW - timedelta(days=7),
     ),
     ChoreAssociation(
         id=_ASSOC_004,
         master_chore_id=_MASTER_004,
-        member_id="raya",
-        created_by="trisha",
+        member_id=_MEMBER_RAYA,
+        created_by=_MEMBER_TRISHA,
         created_at=_NOW - timedelta(days=5),
         updated_at=_NOW - timedelta(days=5),
     ),
     ChoreAssociation(
         id=_ASSOC_005,
         master_chore_id=_MASTER_006,
-        member_id="arya",
-        created_by="faiyaz",
+        member_id=_MEMBER_ARYA,
+        created_by=_MEMBER_FAIYAZ,
         created_at=_NOW - timedelta(days=10),
         updated_at=_NOW - timedelta(days=10),
     ),
     ChoreAssociation(
         id=_ASSOC_006,
         master_chore_id=_MASTER_007,
-        member_id="arya",
-        created_by="faiyaz",
+        member_id=_MEMBER_ARYA,
+        created_by=_MEMBER_FAIYAZ,
         created_at=_NOW - timedelta(days=5),
         updated_at=_NOW - timedelta(days=5),
     ),
@@ -262,6 +277,7 @@ _INSTANCES = [
         association_id=_ASSOC_001,
         period_start=_TODAY,
         period_end=_TODAY,
+        member_id=_MEMBER_ARYA,
         status=InstanceStatus.ACTIVE,
         created_at=_NOW - timedelta(hours=6),
         updated_at=_NOW - timedelta(hours=6),
@@ -272,74 +288,72 @@ _INSTANCES = [
         association_id=_ASSOC_002,
         period_start=_TODAY - timedelta(days=_TODAY.weekday()),
         period_end=_TODAY - timedelta(days=_TODAY.weekday()) + timedelta(days=6),
+        member_id=_MEMBER_FAIYAZ,  # Claimed from open pool
         status=InstanceStatus.ACTIVE,
         created_at=_NOW - timedelta(days=1),
         updated_at=_NOW - timedelta(days=1),
     ),
-    # Claimed by arya, in progress
+    # In progress by arya (self-claimed)
     ChoreInstance(
         id=_INST_003,
         master_chore_id=_MASTER_002,
         association_id=_ASSOC_003,
         period_start=_TODAY,
         period_end=_TODAY,
+        member_id=_MEMBER_ARYA,
         status=InstanceStatus.IN_PROGRESS,
-        claimed_by="arya",
         started_at=_NOW - timedelta(hours=2),
         created_at=_NOW - timedelta(hours=8),
         updated_at=_NOW - timedelta(hours=2),
     ),
-    # Assigned to raya
+    # Assigned to raya by trisha
     ChoreInstance(
         id=_INST_004,
         master_chore_id=_MASTER_004,
         association_id=_ASSOC_004,
         period_start=_TODAY - timedelta(days=_TODAY.weekday()),
         period_end=_TODAY - timedelta(days=_TODAY.weekday()) + timedelta(days=6),
+        member_id=_MEMBER_RAYA,
+        assigned_by=_MEMBER_TRISHA,
         status=InstanceStatus.ACTIVE,
-        assigned_to="raya",
-        assigned_by="trisha",
         created_at=_NOW - timedelta(days=2),
         updated_at=_NOW - timedelta(days=2),
     ),
-    # Completed (arya self-completed)
+    # Completed by arya (self-completed)
     ChoreInstance(
         id=_INST_005,
         master_chore_id=_MASTER_006,
         association_id=_ASSOC_005,
         period_start=_TODAY - timedelta(days=1),
         period_end=_TODAY - timedelta(days=1),
+        member_id=_MEMBER_ARYA,
         status=InstanceStatus.COMPLETED,
-        claimed_by="arya",
-        completed_by="arya",
         completed_at=_NOW - timedelta(hours=12),
         created_at=_NOW - timedelta(days=1),
         updated_at=_NOW - timedelta(hours=12),
     ),
-    # Completed (faiyaz self-completed)
+    # Completed by faiyaz (self-completed)
     ChoreInstance(
         id=_INST_006,
         master_chore_id=_MASTER_001,
         association_id=_ASSOC_001,
         period_start=_TODAY - timedelta(days=1),
         period_end=_TODAY - timedelta(days=1),
+        member_id=_MEMBER_FAIYAZ,
         status=InstanceStatus.COMPLETED,
-        claimed_by="faiyaz",
-        completed_by="faiyaz",
         completed_at=_NOW - timedelta(hours=20),
         created_at=_NOW - timedelta(days=1),
         updated_at=_NOW - timedelta(hours=20),
     ),
-    # In progress by raya
+    # In progress by raya (assigned by faiyaz)
     ChoreInstance(
         id=_INST_007,
         master_chore_id=_MASTER_002,
         association_id=_ASSOC_003,
         period_start=_TODAY - timedelta(days=1),
         period_end=_TODAY - timedelta(days=1),
-        status=InstanceStatus.IN_PROGRESS,
-        assigned_to="raya",
-        assigned_by="faiyaz",
+        member_id=_MEMBER_RAYA,
+        assigned_by=_MEMBER_FAIYAZ,
         started_at=_NOW - timedelta(hours=1),
         created_at=_NOW - timedelta(days=1),
         updated_at=_NOW - timedelta(hours=1),
@@ -613,14 +627,14 @@ class MockChoresRepository:
     async def list_associations(
         self,
         master_chore_id: UUID | None = None,
-        member_id: str | None = None,
+        member_id: UUID | None = None,
         include_removed: bool = False,
     ) -> list[ChoreAssociation]:
         """Return mock chore associations with optional filters.
 
         Args:
             master_chore_id: Filter by master chore ID.
-            member_id: Filter by member ID.
+            member_id: Filter by member UUID (None = open pool).
             include_removed: Whether to include soft-deleted associations.
 
         Returns:
@@ -631,7 +645,7 @@ class MockChoresRepository:
             result = [a for a in result if a.removed_at is None]
         if master_chore_id:
             result = [a for a in result if a.master_chore_id == master_chore_id]
-        if member_id:
+        if member_id is not None:
             result = [a for a in result if a.member_id == member_id]
         return result
 
@@ -646,11 +660,11 @@ class MockChoresRepository:
         """
         return await self.list_associations(master_chore_id=master_chore_id)
 
-    async def get_associations_by_member(self, member_id: str) -> list[ChoreAssociation]:
+    async def get_associations_by_member(self, member_id: UUID) -> list[ChoreAssociation]:
         """Return all active associations for a member.
 
         Args:
-            member_id: Unique identifier for the member.
+            member_id: UUID of the member.
 
         Returns:
             List of active ChoreAssociation entities.
@@ -703,14 +717,14 @@ class MockChoresRepository:
         self,
         association_id: UUID,
         period_start: date,
-        period_end: date,
     ) -> ChoreInstance | None:
         """Find an existing instance for a specific period and association.
+
+        Matches on (association_id, period_start) per the unique constraint.
 
         Args:
             association_id: FK to the association.
             period_start: Period start date to match.
-            period_end: Period end date to match.
 
         Returns:
             ChoreInstance if found, None otherwise.
@@ -719,7 +733,6 @@ class MockChoresRepository:
             if (
                 instance.association_id == association_id
                 and instance.period_start == period_start
-                and instance.period_end == period_end
                 and instance.status != InstanceStatus.ARCHIVED
             ):
                 return instance
