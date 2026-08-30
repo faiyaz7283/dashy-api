@@ -16,43 +16,46 @@ class RecurrenceRule(BaseModel):
     Validates field combinations based on frequency:
     - once: no additional fields required
     - daily: no additional fields required
-    - weekly: requires day_of_week
+    - weekly: requires day_of_week (list of days, e.g. [1,3,5] for Mon/Wed/Fri)
     - monthly: requires day_of_month OR (day_of_week + week_of_month)
     - yearly: requires month + (day_of_month OR (day_of_week + week_of_month))
 
     Examples:
         Daily at 8am:
-            {"frequency": "daily", "time": "08:00"}
+            {"frequency": "daily", "frequency_interval": 1, "time": "08:00"}
+        Every 3 days at 8am:
+            {"frequency": "daily", "frequency_interval": 3, "time": "08:00"}
         Weekly on Monday at 9am:
-            {"frequency": "weekly", "day_of_week": 1, "time": "09:00"}
+            {"frequency": "weekly", "frequency_interval": 1,
+             "day_of_week": [1], "time": "09:00"}
+        Biweekly Mon/Wed/Fri:
+            {"frequency": "weekly", "frequency_interval": 2,
+             "day_of_week": [1, 3, 5], "time": "09:00"}
         Monthly on 3rd at 10am:
-            {"frequency": "monthly", "day_of_month": 3, "time": "10:00"}
+            {"frequency": "monthly", "frequency_interval": 1,
+             "day_of_month": 3, "time": "10:00"}
         Monthly first Monday at 8am:
-            {"frequency": "monthly", "day_of_week": 1, "week_of_month": 1, "time": "08:00"}
+            {"frequency": "monthly", "frequency_interval": 1,
+             "day_of_week": [1], "week_of_month": 1, "time": "08:00"}
         Yearly on Jan 15th at 9am:
-            {"frequency": "yearly", "month": 1, "day_of_month": 15, "time": "09:00"}
-        Yearly 4th Thursday Nov at 12pm:
-            {
-                "frequency": "yearly",
-                "month": 11,
-                "day_of_week": 3,
-                "week_of_month": 4,
-                "time": "12:00"
-            }
+            {"frequency": "yearly", "frequency_interval": 1,
+             "month": 1, "day_of_month": 15, "time": "09:00"}
 
     Attributes:
         frequency: How often the chore recurs.
+        frequency_interval: Every N days/weeks/months/years (default 1).
         time: Time of day in HH:MM 24-hour format (required for all frequencies).
-        day_of_week: Day of week (0=Monday, 6=Sunday). Required for weekly.
+        day_of_week: Days of week (0=Monday, 6=Sunday). List for multi-day patterns.
         day_of_month: Day of month (1-31). Required for monthly/yearly with fixed date.
         week_of_month: Week of month (1-5). Used with day_of_week for "first Monday" patterns.
         month: Month (1-12). Required for yearly.
     """
 
     frequency: Literal["once", "daily", "weekly", "monthly", "yearly"]
+    frequency_interval: int = 1
     time: str
 
-    day_of_week: int | None = None
+    day_of_week: list[int] | None = None
     day_of_month: int | None = None
     week_of_month: int | None = None
     month: int | None = None
@@ -67,14 +70,17 @@ class RecurrenceRule(BaseModel):
         Raises:
             ValueError: If required fields are missing for the frequency.
         """
+        if self.frequency_interval < 1:
+            raise ValueError("frequency_interval must be >= 1")
+
         if self.frequency in ("once", "daily"):
             pass
         elif self.frequency == "weekly":
-            if self.day_of_week is None:
-                raise ValueError("weekly frequency requires day_of_week")
+            if not self.day_of_week:
+                raise ValueError("weekly frequency requires day_of_week (non-empty list)")
         elif self.frequency == "monthly":
             if self.day_of_month is None and (
-                self.day_of_week is None or self.week_of_month is None
+                not self.day_of_week or self.week_of_month is None
             ):
                 raise ValueError(
                     "monthly frequency requires either day_of_month OR "
@@ -84,7 +90,7 @@ class RecurrenceRule(BaseModel):
             if self.month is None:
                 raise ValueError("yearly frequency requires month")
             if self.day_of_month is None and (
-                self.day_of_week is None or self.week_of_month is None
+                not self.day_of_week or self.week_of_month is None
             ):
                 raise ValueError(
                     "yearly frequency requires either (month + day_of_month) OR "

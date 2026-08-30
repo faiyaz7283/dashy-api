@@ -15,6 +15,7 @@ from app.core.database import SQLModel
 # Import all models for autogenerate support
 from app.infrastructure.persistence.models import (  # noqa: F401
     ChoreAssociationDB,
+    ChoreAuditLogDB,
     ChoreCategoryDB,
     ChoreInstanceDB,
     ChoreTagDB,

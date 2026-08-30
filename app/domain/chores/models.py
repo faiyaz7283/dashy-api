@@ -10,20 +10,6 @@ from enum import StrEnum
 from uuid import UUID
 
 
-class ExpirationBehavior(StrEnum):
-    """What happens to an instance when its period ends without completion.
-
-    Attributes:
-        DISAPPEAR: Instance is removed entirely.
-        STAY_VISIBLE: Instance remains, marked as missed.
-        CONVERT_TO_OPEN: Instance moves to the open pool for anyone to claim.
-    """
-
-    DISAPPEAR = "disappear"
-    STAY_VISIBLE = "stay_visible"
-    CONVERT_TO_OPEN = "convert_to_open"
-
-
 class MasterChoreStatus(StrEnum):
     """Lifecycle status of a master chore template.
 
@@ -135,26 +121,29 @@ class MasterChore:
     """Master chore template defining a recurring or one-time chore.
 
     A master chore produces chore instances for each period based on
-    its recurrence_rule configuration.
+    its recurrence configuration.
 
     Attributes:
-        id: Unique identifier (UUID string).
+        id: Unique identifier (UUID).
         name: Chore name (e.g. "Wipe Kitchen Counter").
         category_id: FK to the chore category.
         tags: Associated tags for this chore.
         difficulty: Difficulty level from 1 (easy) to 5 (hard).
-        recurrence_rule: Recurrence pattern config (validated as RecurrenceRule).
-            Contains frequency, time, day_of_week, day_of_month, week_of_month, month.
+        frequency: Recurrence type (once, daily, weekly, monthly, yearly).
+        frequency_interval: Every N days/weeks/months/years (default 1).
+        day_of_week: Days of week for weekly/monthly recurrence (0=Sun..6=Sat).
+        day_of_month: Day of month for monthly/yearly recurrence (1-31).
+        week_of_month: Week of month for monthly recurrence (1-5, e.g. "3rd Tuesday").
+        month: Month for yearly recurrence (1-12).
         estimated_minutes: Optional time estimate in minutes.
-        due_time: Optional time-of-day deadline (ISO time string).
-        due_date: Optional specific due date (ISO date string).
-        expiration_behavior: What happens when the period ends.
-        end_date: Stop generating after this date (ISO date string).
+        due_time: Optional time-of-day deadline (HH:MM).
+        due_date: Optional specific due date (for 'once' frequency).
+        end_date: Stop generating after this date.
         max_occurrences: Stop after N total instances generated.
         occurrence_count: Total instances generated so far.
         conditions: Conditional chore conditions (validated as ConditionsConfig).
         is_collaborative: Whether multiple members can have simultaneous instances.
-        created_by: Member ID of the creator.
+        created_by: Member UUID of the creator.
         status: Current lifecycle status.
         created_at: When the master was created.
         updated_at: When the master was last updated.
@@ -164,19 +153,31 @@ class MasterChore:
     id: UUID
     name: str
     category_id: UUID
+    created_by: UUID
     tags: list[ChoreTag] = field(default_factory=list)
     difficulty: int = 1
-    recurrence_rule: dict | None = None
+
+    # Recurrence (flattened)
+    frequency: str = "once"
+    frequency_interval: int = 1
+    day_of_week: list[int] | None = None
+    day_of_month: int | None = None
+    week_of_month: int | None = None
+    month: int | None = None
+
+    # Timing
     estimated_minutes: int | None = None
     due_time: str | None = None
     due_date: date | None = None
-    expiration_behavior: ExpirationBehavior = ExpirationBehavior.DISAPPEAR
+
+    # Termination
     end_date: date | None = None
     max_occurrences: int | None = None
     occurrence_count: int = 0
+
+    # Metadata
     conditions: dict | None = None
     is_collaborative: bool = False
-    created_by: str = ""
     status: MasterChoreStatus = MasterChoreStatus.ACTIVE
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
@@ -209,19 +210,17 @@ class ChoreInstance:
     """A single occurrence of a chore for a specific period.
 
     Generated from a master chore template via an association. Each instance
-    has its own status, claim/assignment, and completion tracking.
+    has its own status, ownership, and completion tracking.
 
     Attributes:
-        id: Unique identifier (UUID string).
+        id: Unique identifier (UUID).
         master_chore_id: FK to the parent master chore template.
         association_id: FK to the association that generated this instance.
-        period_start: When this instance's period begins.
-        period_end: When this instance's period ends.
+        period_start: When this instance's period begins (date, not datetime).
+        period_end: When this instance's period ends (NULL = no deadline).
+        member_id: Member UUID who owns this instance.
+        assigned_by: Member UUID who assigned this instance (NULL = self-claimed).
         status: Current lifecycle status.
-        claimed_by: Member ID who voluntarily claimed this instance.
-        assigned_to: Member ID who was assigned this instance.
-        assigned_by: Member ID who made the assignment.
-        completed_by: Member ID who marked this as done.
         started_at: When work began.
         completed_at: When marked complete.
         created_at: When the instance was created.
@@ -230,14 +229,12 @@ class ChoreInstance:
 
     id: UUID
     master_chore_id: UUID
-    association_id: UUID | None = None
-    period_start: date | None = None
+    association_id: UUID
+    period_start: date
     period_end: date | None = None
+    member_id: UUID
+    assigned_by: UUID | None = None
     status: InstanceStatus = InstanceStatus.ACTIVE
-    claimed_by: str | None = None
-    assigned_to: str | None = None
-    assigned_by: str | None = None
-    completed_by: str | None = None
     started_at: datetime | None = None
     completed_at: datetime | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
@@ -270,14 +267,14 @@ class ChoreAssociation:
     """Persistent link between a master chore and a member or open pool.
 
     Associations trigger instance generation and track who is responsible
-    for a chore. Soft-deleted by setting removed_at.
+    for a chore. member_id NULL = open pool (anyone can claim).
+    Soft-deleted by setting removed_at.
 
     Attributes:
-        id: Unique identifier (UUID string).
+        id: Unique identifier (UUID).
         master_chore_id: FK to the master chore template.
-        member_id: FK to the family member (None for open pool).
-        is_open_pool: Whether this is an open pool (anyone can claim).
-        created_by: Member ID who created this association.
+        member_id: Member UUID (NULL = open pool).
+        created_by: Member UUID who created this association.
         created_at: When the association was created.
         updated_at: When the association was last updated.
         removed_at: When the association was soft-deleted (None = active).
@@ -285,9 +282,8 @@ class ChoreAssociation:
 
     id: UUID
     master_chore_id: UUID
-    member_id: str | None = None
-    is_open_pool: bool = False
-    created_by: str = ""
+    member_id: UUID | None = None
+    created_by: UUID
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     removed_at: datetime | None = None
