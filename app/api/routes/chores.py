@@ -10,7 +10,6 @@ from uuid6 import uuid7
 
 from app.api.deps import ChoresServiceDep
 from app.api.models.chores import (
-    AssignInstanceRequest,
     AssociationCreateResponse,
     AssociationResponse,
     BulkUpdateMasterStatusRequest,
@@ -18,13 +17,12 @@ from app.api.models.chores import (
     ChoreInstanceResponse,
     ChoresResponse,
     ChoreTagResponse,
-    ClaimInstanceRequest,
     CreateAssociationRequest,
     CreateCategoryRequest,
     CreateMasterChoreRequest,
     CreateTagRequest,
     MasterChoreResponse,
-    UpdateInstanceStatusRequest,
+    UpdateInstanceRequest,
     UpdateMasterChoreRequest,
 )
 from app.domain.chores.models import (
@@ -439,17 +437,24 @@ async def delete_association(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@router.post("/instances/{instance_id}/claim", response_model=ChoreInstanceResponse)
-async def claim_instance(
+@router.patch("/instances/{instance_id}", response_model=ChoreInstanceResponse)
+async def update_instance(
     instance_id: UUID,
-    body: ClaimInstanceRequest,
+    body: UpdateInstanceRequest,
     chores_service: ChoresServiceDep,
 ) -> ChoreInstanceResponse:
-    """Claim a chore instance for a member.
+    """Update a chore instance.
+
+    Supports multiple operations via the action field:
+    - claim: Set member_id, clear assigned_by (self-claim)
+    - assign: Set member_id and assigned_by (assigned by another member)
+    - revert: Revert status by one step (completed→in_progress→active)
+    - reset: Reset to active, clear progress fields
+    - status: Generic status update (e.g., complete, mark overdue)
 
     Args:
         instance_id: Instance identifier.
-        body: Claim request with member ID.
+        body: Update request with action and relevant fields.
         chores_service: Injected chores service.
 
     Returns:
@@ -457,80 +462,42 @@ async def claim_instance(
 
     Raises:
         HTTPException 404: Instance not found.
+        HTTPException 400: Invalid action or status.
         HTTPException 422: Member already has an association for this master.
     """
     try:
-        updated = await chores_service.claim_instance(instance_id, body.member_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except AssociationConflictError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    return _instance_to_response(updated)
-
-
-@router.post("/instances/{instance_id}/assign", response_model=ChoreInstanceResponse)
-async def assign_instance(
-    instance_id: UUID,
-    body: AssignInstanceRequest,
-    chores_service: ChoresServiceDep,
-) -> ChoreInstanceResponse:
-    """Assign a chore instance to a member.
-
-    Args:
-        instance_id: Instance identifier.
-        body: Assign request with assignee and assigner IDs.
-        chores_service: Injected chores service.
-
-    Returns:
-        The updated instance.
-
-    Raises:
-        HTTPException 404: Instance not found.
-        HTTPException 422: Member already has an association for this master.
-    """
-    try:
-        updated = await chores_service.assign_instance(
-            instance_id, body.assignee_id, body.assigner_id
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except AssociationConflictError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-
-    return _instance_to_response(updated)
-
-
-@router.patch("/instances/{instance_id}/status", response_model=ChoreInstanceResponse)
-async def update_instance_status(
-    instance_id: UUID,
-    body: UpdateInstanceStatusRequest,
-    chores_service: ChoresServiceDep,
-) -> ChoreInstanceResponse:
-    """Update the status of a chore instance.
-
-    Args:
-        instance_id: Instance identifier.
-        body: Status update request.
-        chores_service: Injected chores service.
-
-    Returns:
-        The updated instance.
-
-    Raises:
-        HTTPException 404: Instance not found.
-    """
-    try:
-        new_status = InstanceStatus(body.status)
-        updated = await chores_service.update_instance_status(
-            instance_id,
-            new_status,
-            body.actor_id,
-        )
+        if body.action == "claim":
+            if not body.member_id:
+                raise HTTPException(status_code=400, detail="member_id required for claim")
+            updated = await chores_service.claim_instance(instance_id, body.member_id)
+        elif body.action == "assign":
+            if not body.member_id or not body.assigned_by:
+                raise HTTPException(
+                    status_code=400,
+                    detail="member_id and assigned_by required for assign",
+                )
+            updated = await chores_service.assign_instance(
+                instance_id, body.member_id, body.assigned_by
+            )
+        elif body.action == "revert":
+            updated = await chores_service.revert_instance_status(instance_id)
+        elif body.action == "reset":
+            updated = await chores_service.reset_instance(instance_id)
+        elif body.status:
+            new_status = InstanceStatus(body.status)
+            if not body.actor_id:
+                raise HTTPException(status_code=400, detail="actor_id required for status update")
+            updated = await chores_service.update_instance_status(
+                instance_id, new_status, body.actor_id
+            )
+        else:
+            raise HTTPException(status_code=400, detail="action or status required")
     except ValueError as exc:
         if "not found" in str(exc):
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except AssociationConflictError as exc:
+        raise HTTPException(status_code=422, detail=exc.message) from exc
 
     return _instance_to_response(updated)
 
@@ -565,69 +532,6 @@ async def delete_instance(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return _instance_to_response(archived)
-
-
-@router.post("/instances/{instance_id}/revert", response_model=ChoreInstanceResponse)
-async def revert_instance_status(
-    instance_id: UUID,
-    chores_service: ChoresServiceDep,
-) -> ChoreInstanceResponse:
-    """Revert an instance's status by one step.
-
-    Status reversal flow:
-    - completed → in_progress (clears completed_at, completed_by)
-    - in_progress → active (clears started_at)
-    - missed → active
-    - overdue → active
-
-    Args:
-        instance_id: Instance identifier.
-        chores_service: Injected chores service.
-
-    Returns:
-        The updated instance.
-
-    Raises:
-        HTTPException 404: Instance not found.
-        HTTPException 400: Instance cannot be reverted.
-    """
-    try:
-        reverted = await chores_service.revert_instance_status(instance_id)
-    except ValueError as exc:
-        if "not found" in str(exc):
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    return _instance_to_response(reverted)
-
-
-@router.post("/instances/{instance_id}/reset", response_model=ChoreInstanceResponse)
-async def reset_instance(
-    instance_id: UUID,
-    chores_service: ChoresServiceDep,
-) -> ChoreInstanceResponse:
-    """Reset an instance to active status regardless of current status.
-
-    Clears all progress tracking fields (started_at, completed_at, completed_by).
-
-    Args:
-        instance_id: Instance identifier.
-        chores_service: Injected chores service.
-
-    Returns:
-        The reset instance.
-
-    Raises:
-        HTTPException 404: Instance not found.
-    """
-    try:
-        reset = await chores_service.reset_instance(instance_id)
-    except ValueError as exc:
-        if "not found" in str(exc):
-            raise HTTPException(status_code=404, detail=str(exc)) from exc
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    return _instance_to_response(reset)
 
 
 @router.post("/categories", response_model=ChoreCategoryResponse, status_code=201)

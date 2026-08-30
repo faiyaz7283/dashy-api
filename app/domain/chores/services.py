@@ -232,15 +232,15 @@ class ChoresService:
         """
         return await self.repository.get_instances(master_chore_id=master_chore_id)
 
-    async def claim_instance(self, instance_id: UUID, member_id: str) -> ChoreInstance:
+    async def claim_instance(self, instance_id: UUID, member_id: UUID) -> ChoreInstance:
         """Claim a chore instance for a member.
 
-        Setting claimed_by clears assigned_to and assigned_by
-        (mutual exclusivity between claim and assign).
+        Sets member_id and clears assigned_by (mutual exclusivity
+        between claim and assign).
 
         Args:
             instance_id: Unique identifier for the instance.
-            member_id: Member ID claiming the instance.
+            member_id: Member UUID claiming the instance.
 
         Returns:
             The updated instance.
@@ -258,8 +258,7 @@ class ChoresService:
         await self._validate_claim_assign(instance, member_id)
 
         updates: dict = {
-            "claimed_by": member_id,
-            "assigned_to": None,
+            "member_id": member_id,
             "assigned_by": None,
         }
 
@@ -273,18 +272,18 @@ class ChoresService:
     async def assign_instance(
         self,
         instance_id: UUID,
-        assignee_id: str,
-        assigner_id: str,
+        assignee_id: UUID,
+        assigner_id: UUID,
     ) -> ChoreInstance:
         """Assign a chore instance to a member.
 
-        Setting assigned_to clears claimed_by (mutual exclusivity
-        between claim and assign).
+        Sets member_id and assigned_by (mutual exclusivity
+        between claim and assign — assigner_id present means assigned).
 
         Args:
             instance_id: Unique identifier for the instance.
-            assignee_id: Member ID being assigned.
-            assigner_id: Member ID making the assignment.
+            assignee_id: Member UUID being assigned.
+            assigner_id: Member UUID making the assignment.
 
         Returns:
             The updated instance.
@@ -302,9 +301,8 @@ class ChoresService:
         await self._validate_claim_assign(instance, assignee_id)
 
         updates: dict = {
-            "assigned_to": assignee_id,
+            "member_id": assignee_id,
             "assigned_by": assigner_id,
-            "claimed_by": None,
         }
 
         logger.info(
@@ -398,7 +396,7 @@ class ChoresService:
         """Revert an instance's status by one step.
 
         Status reversal flow:
-        - completed → in_progress (clears completed_at, completed_by)
+        - completed → in_progress (clears completed_at)
         - in_progress → active (clears started_at)
         - missed → active
         - overdue → active
@@ -424,7 +422,6 @@ class ChoresService:
         if instance.status == InstanceStatus.COMPLETED:
             updates["status"] = InstanceStatus.IN_PROGRESS
             updates["completed_at"] = None
-            updates["completed_by"] = None
         elif instance.status == InstanceStatus.IN_PROGRESS:
             updates["status"] = InstanceStatus.ACTIVE
             updates["started_at"] = None
@@ -446,7 +443,7 @@ class ChoresService:
     async def reset_instance(self, instance_id: UUID) -> ChoreInstance:
         """Reset an instance to active status regardless of current status.
 
-        Clears all progress tracking fields (started_at, completed_at, completed_by).
+        Clears all progress tracking fields (started_at, completed_at).
 
         Args:
             instance_id: Unique identifier for the instance.
@@ -468,7 +465,6 @@ class ChoresService:
                 "status": InstanceStatus.ACTIVE,
                 "started_at": None,
                 "completed_at": None,
-                "completed_by": None,
                 "updated_at": now,
             },
         )
@@ -482,19 +478,18 @@ class ChoresService:
         self,
         instance_id: UUID,
         new_status: InstanceStatus,
-        actor_id: str,
+        actor_id: UUID,
     ) -> ChoreInstance:
         """Update the status of a chore instance.
 
         Any member can complete any instance — no approval or signoff required.
         When an instance is completed, triggers generation of the next instance
-        for the same association. If the master's expiration_behavior is
-        "disappear", the completed instance is archived immediately.
+        for the same association.
 
         Args:
             instance_id: Unique identifier for the instance.
             new_status: The target status.
-            actor_id: Member ID performing the action.
+            actor_id: Member UUID performing the action.
 
         Returns:
             The updated instance.
@@ -515,7 +510,6 @@ class ChoresService:
 
         elif new_status == InstanceStatus.COMPLETED:
             updates["status"] = InstanceStatus.COMPLETED
-            updates["completed_by"] = actor_id
             updates["completed_at"] = now
 
         else:
@@ -532,20 +526,6 @@ class ChoresService:
         if new_status == InstanceStatus.COMPLETED and instance.association_id:
             # Generate next instance for recurring chores
             await self.generate_instance_for_association(instance.association_id)
-
-            # Check if we should archive this completed instance
-            master = await self.repository.get_master_chore_by_id(
-                instance.master_chore_id
-            )
-            if (
-                master
-                and master.expiration_behavior == ExpirationBehavior.DISAPPEAR
-            ):
-                await self.repository.update_instance(
-                    instance_id, {"status": InstanceStatus.ARCHIVED}
-                )
-                # Return the archived instance
-                updated = await self.repository.get_instance_by_id(instance_id)
 
         return updated
 

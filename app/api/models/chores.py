@@ -401,21 +401,49 @@ class AssignInstanceRequest(BaseModel):
     assigner_id: UUID
 
 
-class UpdateInstanceStatusRequest(BaseModel):
-    """Request body for updating instance status.
+class UpdateInstanceRequest(BaseModel):
+    """Request body for updating a chore instance.
+
+    Supports multiple operations via the action field:
+    - claim: Set member_id, clear assigned_by (self-claim)
+    - assign: Set member_id and assigned_by (assigned by another member)
+    - revert: Revert status by one step
+    - reset: Reset to active, clear progress fields
+    - status: Generic status update (requires actor_id)
 
     Attributes:
-        status: Target status value.
-        actor_id: Member UUID performing the action.
+        action: Operation to perform (claim, assign, revert, reset).
+        status: Target status value (for generic status updates).
+        member_id: Member UUID (for claim/assign operations).
+        assigned_by: Member UUID who assigned (for assign operations).
+        actor_id: Member UUID performing the action (for status updates).
     """
 
-    status: str
-    actor_id: UUID
+    action: str | None = None
+    status: str | None = None
+    member_id: UUID | None = None
+    assigned_by: UUID | None = None
+    actor_id: UUID | None = None
+
+    @field_validator("action")
+    @classmethod
+    def validate_action(cls, v: str | None) -> str | None:
+        """Validate that action is a valid value."""
+        if v is None:
+            return v
+        valid_actions = {"claim", "assign", "revert", "reset"}
+        if v not in valid_actions:
+            raise ValueError(
+                f"Invalid action: {v}. Must be one of: {', '.join(valid_actions)}"
+            )
+        return v
 
     @field_validator("status")
     @classmethod
-    def validate_status(cls, v: str) -> str:
+    def validate_status(cls, v: str | None) -> str | None:
         """Validate that status is a valid enum value."""
+        if v is None:
+            return v
         try:
             InstanceStatus(v)
         except ValueError:
