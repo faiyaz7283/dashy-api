@@ -210,14 +210,14 @@ class ChoresRepository(Protocol):
     async def list_associations(
         self,
         master_chore_id: UUID | None = None,
-        member_id: str | None = None,
+        member_id: UUID | None = None,
         include_removed: bool = False,
     ) -> list[ChoreAssociation]:
         """Retrieve chore associations with optional filters.
 
         Args:
             master_chore_id: Filter by master chore ID.
-            member_id: Filter by member ID.
+            member_id: Filter by member UUID (None = open pool).
             include_removed: Whether to include soft-deleted associations.
 
         Returns:
@@ -236,11 +236,11 @@ class ChoresRepository(Protocol):
         """
         ...
 
-    async def get_associations_by_member(self, member_id: str) -> list[ChoreAssociation]:
+    async def get_associations_by_member(self, member_id: UUID) -> list[ChoreAssociation]:
         """Retrieve all active associations for a member.
 
         Args:
-            member_id: Unique identifier for the member.
+            member_id: UUID of the member.
 
         Returns:
             List of active chore associations.
@@ -278,16 +278,15 @@ class ChoresRepository(Protocol):
         self,
         association_id: UUID,
         period_start: date,
-        period_end: date,
     ) -> ChoreInstance | None:
         """Find an existing instance for a specific period and association.
 
         Used by instance generation to avoid creating duplicates.
+        Matches on (association_id, period_start) per the unique constraint.
 
         Args:
             association_id: FK to the association.
             period_start: Period start date to match.
-            period_end: Period end date to match.
 
         Returns:
             ChoreInstance if found, None otherwise.

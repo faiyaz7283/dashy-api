@@ -12,7 +12,6 @@ from app.domain.chores.models import (
     ChoreCategory,
     ChoreInstance,
     ChoreTag,
-    ExpirationBehavior,
     InstanceStatus,
     MasterChore,
     MasterChoreStatus,
@@ -434,14 +433,14 @@ class ChoresRepositoryImpl:
     async def list_associations(
         self,
         master_chore_id: UUID | None = None,
-        member_id: str | None = None,
+        member_id: UUID | None = None,
         include_removed: bool = False,
     ) -> list[ChoreAssociation]:
         """Retrieve chore associations with optional filters.
 
         Args:
             master_chore_id: Filter by master chore ID.
-            member_id: Filter by member ID.
+            member_id: Filter by member UUID (None = open pool).
             include_removed: Whether to include soft-deleted associations.
 
         Returns:
@@ -452,7 +451,7 @@ class ChoresRepositoryImpl:
             statement = statement.where(ChoreAssociationDB.removed_at.is_(None))
         if master_chore_id:
             statement = statement.where(ChoreAssociationDB.master_chore_id == master_chore_id)
-        if member_id:
+        if member_id is not None:
             statement = statement.where(ChoreAssociationDB.member_id == member_id)
         statement = statement.order_by(ChoreAssociationDB.created_at.desc())
         result = await self.session.execute(statement)
@@ -470,11 +469,11 @@ class ChoresRepositoryImpl:
         """
         return await self.list_associations(master_chore_id=master_chore_id)
 
-    async def get_associations_by_member(self, member_id: str) -> list[ChoreAssociation]:
+    async def get_associations_by_member(self, member_id: UUID) -> list[ChoreAssociation]:
         """Retrieve all active associations for a member.
 
         Args:
-            member_id: Unique identifier for the member.
+            member_id: UUID of the member.
 
         Returns:
             List of active domain ChoreAssociation entities.
@@ -543,16 +542,15 @@ class ChoresRepositoryImpl:
         self,
         association_id: UUID,
         period_start: date,
-        period_end: date,
     ) -> ChoreInstance | None:
         """Find an existing instance for a specific period and association.
 
         Used by instance generation to avoid creating duplicates.
+        Matches on (association_id, period_start) per the unique constraint.
 
         Args:
             association_id: FK to the association.
             period_start: Period start date to match.
-            period_end: Period end date to match.
 
         Returns:
             Domain ChoreInstance if found, None otherwise.
@@ -562,7 +560,6 @@ class ChoresRepositoryImpl:
             .where(
                 ChoreInstanceDB.association_id == association_id,
                 ChoreInstanceDB.period_start == period_start,
-                ChoreInstanceDB.period_end == period_end,
                 ChoreInstanceDB.status != InstanceStatus.ARCHIVED.value,
             )
         )
@@ -715,19 +712,23 @@ class ChoresRepositoryImpl:
             id=db_master.id,
             name=db_master.name,
             category_id=db_master.category_id,
+            created_by=db_master.created_by,
             tags=tags,
             difficulty=db_master.difficulty,
-            recurrence_rule=db_master.recurrence_rule,
+            frequency=db_master.frequency,
+            frequency_interval=db_master.frequency_interval,
+            day_of_week=db_master.day_of_week,
+            day_of_month=db_master.day_of_month,
+            week_of_month=db_master.week_of_month,
+            month=db_master.month,
             estimated_minutes=db_master.estimated_minutes,
             due_time=db_master.due_time,
             due_date=db_master.due_date,
-            expiration_behavior=ExpirationBehavior(db_master.expiration_behavior),
             end_date=db_master.end_date,
             max_occurrences=db_master.max_occurrences,
             occurrence_count=db_master.occurrence_count,
             conditions=db_master.conditions,
             is_collaborative=db_master.is_collaborative,
-            created_by=db_master.created_by,
             status=MasterChoreStatus(db_master.status),
             created_at=db_master.created_at,
             updated_at=db_master.updated_at,
@@ -748,18 +749,22 @@ class ChoresRepositoryImpl:
             id=chore.id,
             name=chore.name,
             category_id=chore.category_id,
+            created_by=chore.created_by,
             difficulty=chore.difficulty,
-            recurrence_rule=chore.recurrence_rule,
+            frequency=chore.frequency,
+            frequency_interval=chore.frequency_interval,
+            day_of_week=chore.day_of_week,
+            day_of_month=chore.day_of_month,
+            week_of_month=chore.week_of_month,
+            month=chore.month,
             estimated_minutes=chore.estimated_minutes,
             due_time=chore.due_time,
             due_date=chore.due_date,
-            expiration_behavior=chore.expiration_behavior.value,
             end_date=chore.end_date,
             max_occurrences=chore.max_occurrences,
             occurrence_count=chore.occurrence_count,
             conditions=chore.conditions,
             is_collaborative=chore.is_collaborative,
-            created_by=chore.created_by,
             status=chore.status.value,
             created_at=chore.created_at,
             updated_at=chore.updated_at,
@@ -782,11 +787,9 @@ class ChoresRepositoryImpl:
             association_id=db_instance.association_id,
             period_start=db_instance.period_start,
             period_end=db_instance.period_end,
-            status=InstanceStatus(db_instance.status),
-            claimed_by=db_instance.claimed_by,
-            assigned_to=db_instance.assigned_to,
+            member_id=db_instance.member_id,
             assigned_by=db_instance.assigned_by,
-            completed_by=db_instance.completed_by,
+            status=InstanceStatus(db_instance.status),
             started_at=db_instance.started_at,
             completed_at=db_instance.completed_at,
             created_at=db_instance.created_at,
@@ -809,11 +812,9 @@ class ChoresRepositoryImpl:
             association_id=instance.association_id,
             period_start=instance.period_start,
             period_end=instance.period_end,
-            status=instance.status.value,
-            claimed_by=instance.claimed_by,
-            assigned_to=instance.assigned_to,
+            member_id=instance.member_id,
             assigned_by=instance.assigned_by,
-            completed_by=instance.completed_by,
+            status=instance.status.value,
             started_at=instance.started_at,
             completed_at=instance.completed_at,
             created_at=instance.created_at,
@@ -834,7 +835,6 @@ class ChoresRepositoryImpl:
             id=db_association.id,
             master_chore_id=db_association.master_chore_id,
             member_id=db_association.member_id,
-            is_open_pool=db_association.is_open_pool,
             created_by=db_association.created_by,
             created_at=db_association.created_at,
             updated_at=db_association.updated_at,
@@ -855,7 +855,6 @@ class ChoresRepositoryImpl:
             id=association.id,
             master_chore_id=association.master_chore_id,
             member_id=association.member_id,
-            is_open_pool=association.is_open_pool,
             created_by=association.created_by,
             created_at=association.created_at,
             updated_at=association.updated_at,
