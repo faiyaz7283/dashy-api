@@ -154,7 +154,7 @@ def upgrade() -> None:
         sa.Column("association_id", sa.Uuid(), nullable=False),
         sa.Column("period_start", sa.Date(), nullable=False),
         sa.Column("period_end", sa.Date(), nullable=True),
-        sa.Column("member_id", sa.Uuid(), nullable=False),
+        sa.Column("member_id", sa.Uuid(), nullable=True),
         sa.Column("assigned_by", sa.Uuid(), nullable=True),
         sa.Column("status", sa.String(), server_default="active", nullable=False),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=True),

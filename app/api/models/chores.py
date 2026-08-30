@@ -100,7 +100,7 @@ class ChoreInstanceResponse(BaseModel):
         association_id: FK to the association that generated this instance.
         period_start: Period start date (ISO string).
         period_end: Period end date (ISO string, None = no deadline).
-        member_id: Member UUID who owns this instance.
+        member_id: Member UUID who owns this instance (None for open pool).
         assigned_by: Member UUID who assigned (None = self-claimed).
         status: Current lifecycle status.
         started_at: ISO datetime when work began.
@@ -114,7 +114,7 @@ class ChoreInstanceResponse(BaseModel):
     association_id: UUID
     period_start: date
     period_end: date | None = None
-    member_id: UUID
+    member_id: UUID | None = None
     assigned_by: UUID | None = None
     status: str
     started_at: datetime | None = None

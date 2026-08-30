@@ -231,7 +231,7 @@ class ChoreInstance:
     master_chore_id: UUID
     association_id: UUID
     period_start: date
-    member_id: UUID
+    member_id: UUID | None = None
     period_end: date | None = None
     assigned_by: UUID | None = None
     status: InstanceStatus = InstanceStatus.ACTIVE

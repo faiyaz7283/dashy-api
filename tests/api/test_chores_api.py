@@ -19,6 +19,10 @@ from app.infrastructure.chores.mock_adapter import (
     _MASTER_002,
     _MASTER_003,
     _MASTER_005,
+    _MEMBER_ARYA,
+    _MEMBER_FAIYAZ,
+    _MEMBER_RAYA,
+    _MEMBER_TRISHA,
     MockChoresRepository,
 )
 from app.main import app
@@ -81,7 +85,7 @@ async def test_get_all_chores(client: AsyncClient) -> None:
         assert "category" in master
         assert "tags" in master
         assert "difficulty" in master
-        assert "recurrence_rule" in master
+        assert "frequency" in master
         assert "status" in master
         assert "created_by" in master
         assert "is_collaborative" in master
@@ -92,7 +96,7 @@ async def test_get_all_chores(client: AsyncClient) -> None:
         assoc = data["associations"][0]
         assert "id" in assoc
         assert "master_chore_id" in assoc
-        assert "member_id" in assoc or "is_open_pool" in assoc
+        assert "member_id" in assoc
 
     # Verify instances have expected fields
     assert isinstance(data["instances"], list)
@@ -114,19 +118,20 @@ async def test_create_master_chore(client: AsyncClient) -> None:
             "category_id": str(_CAT_KITCHEN),
             "tag_ids": [],
             "difficulty": 2,
-            "recurrence_rule": {"frequency": "daily", "time": "18:00"},
+            "frequency": "daily",
+            "frequency_interval": 1,
+            "due_time": "18:00",
             "estimated_minutes": 10,
-            "expiration_behavior": "stay_visible",
-            "created_by": "faiyaz",
+            "created_by": str(_MEMBER_FAIYAZ),
         },
     )
     assert response.status_code == 201
     data = response.json()
     assert data["name"] == "Test Chore"
     assert data["difficulty"] == 2
-    assert data["recurrence_rule"]["frequency"] == "daily"
+    assert data["frequency"] == "daily"
     assert data["status"] == "active"
-    assert data["created_by"] == "faiyaz"
+    assert data["created_by"] == str(_MEMBER_FAIYAZ)
 
 
 @pytest.mark.asyncio
@@ -139,15 +144,16 @@ async def test_create_master_chore_with_conditions(client: AsyncClient) -> None:
             "category_id": str(_CAT_OUTDOOR),
             "tag_ids": [],
             "difficulty": 3,
-            "recurrence_rule": {"frequency": "daily", "time": "08:00"},
+            "frequency": "daily",
+            "frequency_interval": 1,
+            "due_time": "08:00",
             "conditions": {
                 "logic": "and",
                 "conditions": [
                     {"type": "weather", "metric": "snowfall", "operator": "gt", "value": 0}
                 ]
             },
-            "expiration_behavior": "disappear",
-            "created_by": "faiyaz",
+            "created_by": str(_MEMBER_FAIYAZ),
         },
     )
     assert response.status_code == 201
@@ -165,16 +171,14 @@ async def test_create_association(client: AsyncClient) -> None:
         "/api/v1/chores/associations",
         json={
             "master_chore_id": str(_MASTER_005),
-            "member_id": "arya",
-            "is_open_pool": False,
-            "created_by": "faiyaz",
+            "member_id": str(_MEMBER_ARYA),
+            "created_by": str(_MEMBER_FAIYAZ),
         },
     )
     assert response.status_code == 201
     data = response.json()
     assert data["master_chore_id"] == str(_MASTER_005)
-    assert data["member_id"] == "arya"
-    assert data["is_open_pool"] is False
+    assert data["member_id"] == str(_MEMBER_ARYA)
     assert "instance" in data  # New field in response
 
 
@@ -186,15 +190,13 @@ async def test_create_open_pool_association(client: AsyncClient) -> None:
         json={
             "master_chore_id": str(_MASTER_005),
             "member_id": None,
-            "is_open_pool": True,
-            "created_by": "trisha",
+            "created_by": str(_MEMBER_TRISHA),
         },
     )
     assert response.status_code == 201
     data = response.json()
     assert data["master_chore_id"] == str(_MASTER_005)
     assert data["member_id"] is None
-    assert data["is_open_pool"] is True
 
 
 @pytest.mark.asyncio
@@ -213,9 +215,8 @@ async def test_create_association_nonexistent_master_returns_404(
         "/api/v1/chores/associations",
         json={
             "master_chore_id": str(uuid7()),
-            "member_id": "arya",
-            "is_open_pool": False,
-            "created_by": "faiyaz",
+            "member_id": str(_MEMBER_ARYA),
+            "created_by": str(_MEMBER_FAIYAZ),
         },
     )
     assert response.status_code == 404
@@ -231,9 +232,8 @@ async def test_create_association_duplicate_member_returns_409(
         "/api/v1/chores/associations",
         json={
             "master_chore_id": str(_MASTER_001),
-            "member_id": "arya",
-            "is_open_pool": False,
-            "created_by": "faiyaz",
+            "member_id": str(_MEMBER_ARYA),
+            "created_by": str(_MEMBER_FAIYAZ),
         },
     )
     assert response.status_code == 409
@@ -251,9 +251,8 @@ async def test_create_association_non_collaborative_conflict_returns_409(
         "/api/v1/chores/associations",
         json={
             "master_chore_id": str(_MASTER_001),
-            "member_id": "raya",
-            "is_open_pool": False,
-            "created_by": "faiyaz",
+            "member_id": str(_MEMBER_RAYA),
+            "created_by": str(_MEMBER_FAIYAZ),
         },
     )
     assert response.status_code == 409
@@ -272,8 +271,7 @@ async def test_create_association_duplicate_open_pool_returns_409(
         json={
             "master_chore_id": str(_MASTER_003),
             "member_id": None,
-            "is_open_pool": True,
-            "created_by": "faiyaz",
+            "created_by": str(_MEMBER_FAIYAZ),
         },
     )
     assert response.status_code == 409
@@ -294,9 +292,8 @@ async def test_create_association_inactive_master_returns_404(
         "/api/v1/chores/associations",
         json={
             "master_chore_id": str(_MASTER_002),
-            "member_id": "arya",
-            "is_open_pool": False,
-            "created_by": "faiyaz",
+            "member_id": str(_MEMBER_ARYA),
+            "created_by": str(_MEMBER_FAIYAZ),
         },
     )
     assert response.status_code == 404
@@ -313,40 +310,42 @@ async def test_delete_nonexistent_association_returns_404(
 
 @pytest.mark.asyncio
 async def test_claim_instance(client: AsyncClient) -> None:
-    """Test POST /api/v1/chores/instances/{id}/claim."""
-    response = await client.post(
-        f"/api/v1/chores/instances/{_INST_001}/claim",
-        json={"member_id": "arya"},
+    """Test PATCH /api/v1/chores/instances/{id} with action=claim."""
+    response = await client.patch(
+        f"/api/v1/chores/instances/{_INST_001}",
+        json={"action": "claim", "member_id": str(_MEMBER_ARYA)},
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["claimed_by"] == "arya"
-    assert data["assigned_to"] is None
+    assert data["member_id"] == str(_MEMBER_ARYA)
     assert data["assigned_by"] is None
 
 
 @pytest.mark.asyncio
 async def test_assign_instance(client: AsyncClient) -> None:
-    """Test POST /api/v1/chores/instances/{id}/assign."""
-    response = await client.post(
-        f"/api/v1/chores/instances/{_INST_001}/assign",
-        json={"assignee_id": "raya", "assigner_id": "trisha"},
+    """Test PATCH /api/v1/chores/instances/{id} with action=assign."""
+    response = await client.patch(
+        f"/api/v1/chores/instances/{_INST_001}",
+        json={
+            "action": "assign",
+            "member_id": str(_MEMBER_RAYA),
+            "assigned_by": str(_MEMBER_TRISHA),
+        },
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["assigned_to"] == "raya"
-    assert data["assigned_by"] == "trisha"
-    assert data["claimed_by"] is None
+    assert data["member_id"] == str(_MEMBER_RAYA)
+    assert data["assigned_by"] == str(_MEMBER_TRISHA)
 
 
 @pytest.mark.asyncio
 async def test_update_instance_status(client: AsyncClient) -> None:
-    """Test PATCH /api/v1/chores/instances/{id}/status."""
+    """Test PATCH /api/v1/chores/instances/{id} with status."""
     response = await client.patch(
-        f"/api/v1/chores/instances/{_INST_001}/status",
+        f"/api/v1/chores/instances/{_INST_001}",
         json={
             "status": "in_progress",
-            "actor_id": "arya",
+            "actor_id": str(_MEMBER_ARYA),
         },
     )
     assert response.status_code == 200
@@ -359,16 +358,15 @@ async def test_update_instance_status(client: AsyncClient) -> None:
 async def test_complete_instance(client: AsyncClient) -> None:
     """Test completing an instance."""
     response = await client.patch(
-        f"/api/v1/chores/instances/{_INST_001}/status",
+        f"/api/v1/chores/instances/{_INST_001}",
         json={
             "status": "completed",
-            "actor_id": "arya",
+            "actor_id": str(_MEMBER_ARYA),
         },
     )
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "completed"
-    assert data["completed_by"] == "arya"
     assert data["completed_at"] is not None
 
 
@@ -408,9 +406,9 @@ async def test_delete_master_chore(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_claim_nonexistent_instance_returns_404(client: AsyncClient) -> None:
     """Test that claiming a nonexistent instance returns 404."""
-    response = await client.post(
-        f"/api/v1/chores/instances/{uuid7()}/claim",
-        json={"member_id": "arya"},
+    response = await client.patch(
+        f"/api/v1/chores/instances/{uuid7()}",
+        json={"action": "claim", "member_id": str(_MEMBER_ARYA)},
     )
     assert response.status_code == 404
 
@@ -510,19 +508,17 @@ async def test_create_association_with_auto_claim(client: AsyncClient) -> None:
         "/api/v1/chores/associations",
         json={
             "master_chore_id": str(_MASTER_005),
-            "member_id": "arya",
-            "is_open_pool": False,
-            "created_by": "faiyaz",
+            "member_id": str(_MEMBER_ARYA),
+            "created_by": str(_MEMBER_FAIYAZ),
             "auto_claim": True,
         },
     )
     assert response.status_code == 201
     data = response.json()
     assert data["master_chore_id"] == str(_MASTER_005)
-    assert data["member_id"] == "arya"
+    assert data["member_id"] == str(_MEMBER_ARYA)
     assert data["instance"] is not None
-    assert data["instance"]["claimed_by"] == "arya"
-    assert data["instance"]["assigned_to"] is None
+    assert data["instance"]["member_id"] == str(_MEMBER_ARYA)
 
 
 @pytest.mark.asyncio
@@ -532,20 +528,18 @@ async def test_create_association_with_auto_assign(client: AsyncClient) -> None:
         "/api/v1/chores/associations",
         json={
             "master_chore_id": str(_MASTER_005),
-            "member_id": "arya",
-            "is_open_pool": False,
-            "created_by": "faiyaz",
-            "auto_assign": {"assigner_id": "trisha"},
+            "member_id": str(_MEMBER_ARYA),
+            "created_by": str(_MEMBER_FAIYAZ),
+            "auto_assign": {"assigner_id": str(_MEMBER_TRISHA)},
         },
     )
     assert response.status_code == 201
     data = response.json()
     assert data["master_chore_id"] == str(_MASTER_005)
-    assert data["member_id"] == "arya"
+    assert data["member_id"] == str(_MEMBER_ARYA)
     assert data["instance"] is not None
-    assert data["instance"]["assigned_to"] == "arya"
-    assert data["instance"]["assigned_by"] == "trisha"
-    assert data["instance"]["claimed_by"] is None
+    assert data["instance"]["member_id"] == str(_MEMBER_ARYA)
+    assert data["instance"]["assigned_by"] == str(_MEMBER_TRISHA)
 
 
 @pytest.mark.asyncio
@@ -558,8 +552,7 @@ async def test_create_association_auto_claim_without_member_returns_422(
         json={
             "master_chore_id": str(_MASTER_005),
             "member_id": None,
-            "is_open_pool": True,
-            "created_by": "faiyaz",
+            "created_by": str(_MEMBER_FAIYAZ),
             "auto_claim": True,
         },
     )
@@ -576,9 +569,8 @@ async def test_create_association_auto_assign_without_member_returns_422(
         json={
             "master_chore_id": str(_MASTER_005),
             "member_id": None,
-            "is_open_pool": True,
-            "created_by": "faiyaz",
-            "auto_assign": {"assigner_id": "trisha"},
+            "created_by": str(_MEMBER_FAIYAZ),
+            "auto_assign": {"assigner_id": str(_MEMBER_TRISHA)},
         },
     )
     assert response.status_code == 422
@@ -593,11 +585,10 @@ async def test_create_association_auto_claim_and_assign_mutually_exclusive(
         "/api/v1/chores/associations",
         json={
             "master_chore_id": str(_MASTER_005),
-            "member_id": "arya",
-            "is_open_pool": False,
-            "created_by": "faiyaz",
+            "member_id": str(_MEMBER_ARYA),
+            "created_by": str(_MEMBER_FAIYAZ),
             "auto_claim": True,
-            "auto_assign": {"assigner_id": "trisha"},
+            "auto_assign": {"assigner_id": str(_MEMBER_TRISHA)},
         },
     )
     assert response.status_code == 422

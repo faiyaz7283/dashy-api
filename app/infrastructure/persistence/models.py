@@ -210,8 +210,9 @@ class ChoreInstanceDB(SQLModel, table=True):
         sa_column=Column(sa.Date, nullable=False),
     )
     period_end: date | None = None
-    member_id: UUID = Field(
-        sa_column=Column(Uuid, ForeignKey("family_members.id"), nullable=False),
+    member_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(Uuid, ForeignKey("family_members.id"), nullable=True),
     )
     assigned_by: UUID | None = Field(
         default=None,
