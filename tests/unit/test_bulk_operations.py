@@ -1,7 +1,5 @@
 """Unit tests for bulk operations (Phase 6)."""
 
-from uuid import UUID
-
 import pytest
 from uuid6 import uuid7
 

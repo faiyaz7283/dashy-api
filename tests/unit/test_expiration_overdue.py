@@ -1,7 +1,6 @@
 """Unit tests for expiration and overdue detection (Phase 4)."""
 
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
 
 import pytest
 from uuid6 import uuid7

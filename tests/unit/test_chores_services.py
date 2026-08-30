@@ -23,6 +23,10 @@ from app.infrastructure.chores.mock_adapter import (
     _MASTER_001,
     _MASTER_003,
     _MASTER_005,
+    _MEMBER_ARYA,
+    _MEMBER_FAIYAZ,
+    _MEMBER_RAYA,
+    _MEMBER_TRISHA,
     _TAG_PHYSICAL,
     _TAG_QUICK,
     MockChoresRepository,
@@ -62,7 +66,7 @@ class TestMasterChoreCreation:
             id=uuid7(),
             name="Test Chore",
             category_id=_CAT_KITCHEN,
-            created_by="faiyaz",
+            created_by=_MEMBER_FAIYAZ,
         )
 
         result = await service.create_master_chore(
@@ -71,7 +75,7 @@ class TestMasterChoreCreation:
         )
 
         assert result.status == MasterChoreStatus.ACTIVE
-        assert result.created_by == "faiyaz"
+        assert result.created_by == _MEMBER_FAIYAZ
 
     @pytest.mark.asyncio
     async def test_create_master_chore_with_tags(self, service: ChoresService) -> None:
@@ -80,7 +84,7 @@ class TestMasterChoreCreation:
             id=uuid7(),
             name="Tagged Chore",
             category_id=_CAT_KITCHEN,
-            created_by="trisha",
+            created_by=_MEMBER_TRISHA,
         )
 
         result = await service.create_master_chore(
@@ -97,35 +101,33 @@ class TestClaimAssignExclusivity:
 
     @pytest.mark.asyncio
     async def test_claim_clears_assignment(self, service: ChoresService) -> None:
-        """Test that claiming an instance clears assigned_to and assigned_by."""
+        """Test that claiming an instance clears assigned_by."""
         # _INST_004 is assigned to raya by trisha
-        result = await service.claim_instance(_INST_004, "arya")
+        result = await service.claim_instance(_INST_004, _MEMBER_ARYA)
 
-        assert result.claimed_by == "arya"
-        assert result.assigned_to is None
+        assert result.member_id == _MEMBER_ARYA
         assert result.assigned_by is None
 
     @pytest.mark.asyncio
     async def test_assign_clears_claim(self, service: ChoresService) -> None:
-        """Test that assigning an instance clears claimed_by."""
+        """Test that assigning an instance sets member_id and assigned_by."""
         # _INST_003 is claimed by arya
-        result = await service.assign_instance(_INST_003, "raya", "trisha")
+        result = await service.assign_instance(_INST_003, _MEMBER_RAYA, _MEMBER_TRISHA)
 
-        assert result.assigned_to == "raya"
-        assert result.assigned_by == "trisha"
-        assert result.claimed_by is None
+        assert result.member_id == _MEMBER_RAYA
+        assert result.assigned_by == _MEMBER_TRISHA
 
     @pytest.mark.asyncio
     async def test_claim_nonexistent_raises(self, service: ChoresService) -> None:
         """Test that claiming a nonexistent instance raises ValueError."""
         with pytest.raises(ValueError, match="not found"):
-            await service.claim_instance(uuid7(), "arya")
+            await service.claim_instance(uuid7(), _MEMBER_ARYA)
 
     @pytest.mark.asyncio
     async def test_assign_nonexistent_raises(self, service: ChoresService) -> None:
         """Test that assigning a nonexistent instance raises ValueError."""
         with pytest.raises(ValueError, match="not found"):
-            await service.assign_instance(uuid7(), "raya", "trisha")
+            await service.assign_instance(uuid7(), _MEMBER_RAYA, _MEMBER_TRISHA)
 
 
 class TestInstanceCompletion:
@@ -134,15 +136,14 @@ class TestInstanceCompletion:
     @pytest.mark.asyncio
     async def test_completion_sets_completed(self, service: ChoresService) -> None:
         """Test that any member can complete an instance."""
-        # _INST_001 is open/active
+        # _INST_001 is active with member_id=_MEMBER_ARYA
         result = await service.update_instance_status(
             _INST_001,
             InstanceStatus.COMPLETED,
-            actor_id="arya",
+            actor_id=_MEMBER_ARYA,
         )
 
         assert result.status == InstanceStatus.COMPLETED
-        assert result.completed_by == "arya"
         assert result.completed_at is not None
 
     @pytest.mark.asyncio
@@ -151,7 +152,7 @@ class TestInstanceCompletion:
         result = await service.update_instance_status(
             _INST_001,
             InstanceStatus.IN_PROGRESS,
-            actor_id="arya",
+            actor_id=_MEMBER_ARYA,
         )
 
         assert result.status == InstanceStatus.IN_PROGRESS
@@ -265,9 +266,8 @@ class TestAssociationValidation:
         new_association = ChoreAssociation(
             id=uuid7(),
             master_chore_id=_MASTER_001,
-            member_id="raya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_RAYA,
+            created_by=_MEMBER_FAIYAZ,
         )
 
         with pytest.raises(AssociationConflictError) as exc_info:
@@ -284,9 +284,8 @@ class TestAssociationValidation:
         duplicate_association = ChoreAssociation(
             id=uuid7(),
             master_chore_id=_MASTER_001,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
 
         with pytest.raises(AssociationConflictError) as exc_info:
@@ -306,7 +305,7 @@ class TestAssociationValidation:
             name="Collaborative Chore",
             category_id=_CAT_KITCHEN,
             is_collaborative=True,
-            created_by="faiyaz",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_master_chore(collaborative_master, tag_ids=[])
 
@@ -315,9 +314,8 @@ class TestAssociationValidation:
         assoc1 = ChoreAssociation(
             id=assoc1_id,
             master_chore_id=collab_master_id,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_association(assoc1)
 
@@ -326,14 +324,13 @@ class TestAssociationValidation:
         assoc2 = ChoreAssociation(
             id=assoc2_id,
             master_chore_id=collab_master_id,
-            member_id="raya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_RAYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         result, instance = await service.create_association(assoc2)
 
         assert result.id == assoc2_id
-        assert result.member_id == "raya"
+        assert result.member_id == _MEMBER_RAYA
 
     @pytest.mark.asyncio
     async def test_create_association_collaborative_duplicate_member_fails(
@@ -347,7 +344,7 @@ class TestAssociationValidation:
             name="Collaborative Chore 2",
             category_id=_CAT_KITCHEN,
             is_collaborative=True,
-            created_by="faiyaz",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_master_chore(collaborative_master, tag_ids=[])
 
@@ -355,9 +352,8 @@ class TestAssociationValidation:
         assoc1 = ChoreAssociation(
             id=uuid7(),
             master_chore_id=collab2_master_id,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_association(assoc1)
 
@@ -365,9 +361,8 @@ class TestAssociationValidation:
         duplicate = ChoreAssociation(
             id=uuid7(),
             master_chore_id=collab2_master_id,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
 
         with pytest.raises(AssociationConflictError) as exc_info:
@@ -383,8 +378,7 @@ class TestAssociationValidation:
             id=uuid7(),
             master_chore_id=_MASTER_003,
             member_id=None,
-            is_open_pool=True,
-            created_by="faiyaz",
+            created_by=_MEMBER_FAIYAZ,
         )
 
         with pytest.raises(AssociationConflictError) as exc_info:
@@ -397,13 +391,12 @@ class TestAssociationValidation:
         self, service: ChoresService
     ) -> None:
         """Bug 5: Non-collaborative master with member association rejects open pool."""
-        # _MASTER_001 (non-collaborative) already has _ASSOC_001 (member "arya")
+        # _MASTER_001 (non-collaborative) already has _ASSOC_001 (member arya)
         new_open_pool = ChoreAssociation(
             id=uuid7(),
             master_chore_id=_MASTER_001,
             member_id=None,
-            is_open_pool=True,
-            created_by="faiyaz",
+            created_by=_MEMBER_FAIYAZ,
         )
 
         with pytest.raises(AssociationConflictError) as exc_info:
@@ -420,9 +413,8 @@ class TestAssociationValidation:
         new_member_assoc = ChoreAssociation(
             id=uuid7(),
             master_chore_id=_MASTER_003,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
 
         with pytest.raises(AssociationConflictError) as exc_info:
@@ -436,9 +428,8 @@ class TestAssociationValidation:
         association = ChoreAssociation(
             id=uuid7(),
             master_chore_id=uuid7(),
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
 
         with pytest.raises(ValueError, match="not found"):
@@ -453,9 +444,8 @@ class TestAssociationValidation:
         association = ChoreAssociation(
             id=uuid7(),
             master_chore_id=_MASTER_001,
-            member_id="raya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_RAYA,
+            created_by=_MEMBER_FAIYAZ,
         )
 
         with pytest.raises(ValueError, match="not active"):
@@ -512,9 +502,8 @@ class TestDeleteAssociationCascade:
         new_association = ChoreAssociation(
             id=no_inst_assoc_id,
             master_chore_id=_MASTER_005,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.repository.create_association(new_association)
 
@@ -537,8 +526,9 @@ class TestInstanceGeneration:
             id=gen_master_id,
             name="Test Generation",
             category_id=_CAT_KITCHEN,
-            recurrence_rule={"frequency": "daily", "time": "18:00"},
-            created_by="faiyaz",
+            frequency="daily",
+            due_time="18:00",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_master_chore(master, tag_ids=[])
 
@@ -546,9 +536,8 @@ class TestInstanceGeneration:
         association = ChoreAssociation(
             id=gen_assoc_id,
             master_chore_id=gen_master_id,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_association(association)
 
@@ -559,7 +548,7 @@ class TestInstanceGeneration:
         assert instance.master_chore_id == gen_master_id
         assert instance.association_id == gen_assoc_id
         assert instance.status == InstanceStatus.ACTIVE
-        assert instance.claimed_by == "arya"
+        assert instance.member_id == _MEMBER_ARYA
 
     @pytest.mark.asyncio
     async def test_generate_instance_respects_end_date(
@@ -572,9 +561,10 @@ class TestInstanceGeneration:
             id=gen2_master_id,
             name="Expired Chore",
             category_id=_CAT_KITCHEN,
-            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            frequency="daily",
+            due_time="18:00",
             end_date=past_date,
-            created_by="faiyaz",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_master_chore(master, tag_ids=[])
 
@@ -582,9 +572,8 @@ class TestInstanceGeneration:
         association = ChoreAssociation(
             id=gen2_assoc_id,
             master_chore_id=gen2_master_id,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_association(association)
 
@@ -605,10 +594,11 @@ class TestInstanceGeneration:
             id=gen3_master_id,
             name="Limited Chore",
             category_id=_CAT_KITCHEN,
-            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            frequency="daily",
+            due_time="18:00",
             max_occurrences=1,
             occurrence_count=1,  # Already at limit
-            created_by="faiyaz",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_master_chore(master, tag_ids=[])
 
@@ -616,9 +606,8 @@ class TestInstanceGeneration:
         association = ChoreAssociation(
             id=gen3_assoc_id,
             master_chore_id=gen3_master_id,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         # Should reject association creation when at max_occurrences
         with pytest.raises(ValueError, match="maximum of 1 occurrences"):
@@ -637,8 +626,9 @@ class TestInstanceGeneration:
             id=gen4_master_id,
             name="No Duplicate",
             category_id=_CAT_KITCHEN,
-            recurrence_rule={"frequency": "daily", "time": "18:00"},
-            created_by="faiyaz",
+            frequency="daily",
+            due_time="18:00",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_master_chore(master, tag_ids=[])
 
@@ -646,9 +636,8 @@ class TestInstanceGeneration:
         association = ChoreAssociation(
             id=gen4_assoc_id,
             master_chore_id=gen4_master_id,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_association(association)
 
@@ -674,9 +663,10 @@ class TestInstanceGeneration:
             id=gen5_master_id,
             name="Count Test",
             category_id=_CAT_KITCHEN,
-            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            frequency="daily",
+            due_time="18:00",
             occurrence_count=0,
-            created_by="faiyaz",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_master_chore(master, tag_ids=[])
 
@@ -684,9 +674,8 @@ class TestInstanceGeneration:
         association = ChoreAssociation(
             id=gen5_assoc_id,
             master_chore_id=gen5_master_id,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_association(association)
 
@@ -710,8 +699,9 @@ class TestSafetyNet:
             id=safety1_master_id,
             name="Safety Net Test",
             category_id=_CAT_KITCHEN,
-            recurrence_rule={"frequency": "daily", "time": "18:00"},
-            created_by="faiyaz",
+            frequency="daily",
+            due_time="18:00",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_master_chore(master, tag_ids=[])
 
@@ -719,9 +709,8 @@ class TestSafetyNet:
         association = ChoreAssociation(
             id=safety1_assoc_id,
             master_chore_id=safety1_master_id,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         # Create association directly without triggering generation
         await service.repository.create_association(association)
@@ -748,8 +737,9 @@ class TestSafetyNet:
             id=safety2_master_id,
             name="Inactive Master",
             category_id=_CAT_KITCHEN,
-            recurrence_rule={"frequency": "daily", "time": "18:00"},
-            created_by="faiyaz",
+            frequency="daily",
+            due_time="18:00",
+            created_by=_MEMBER_FAIYAZ,
         )
         # Create via repository to bypass the ACTIVE override in service
         master.status = MasterChoreStatus.INACTIVE
@@ -759,9 +749,8 @@ class TestSafetyNet:
         association = ChoreAssociation(
             id=safety2_assoc_id,
             master_chore_id=safety2_master_id,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.repository.create_association(association)
 
@@ -786,8 +775,9 @@ class TestCompletionTrigger:
             id=complete_master_id,
             name="Completion Trigger",
             category_id=_CAT_KITCHEN,
-            recurrence_rule={"frequency": "daily", "time": "18:00"},
-            created_by="faiyaz",
+            frequency="daily",
+            due_time="18:00",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_master_chore(master, tag_ids=[])
 
@@ -795,9 +785,8 @@ class TestCompletionTrigger:
         association = ChoreAssociation(
             id=complete_assoc_id,
             master_chore_id=complete_master_id,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_association(association)
 
@@ -808,7 +797,7 @@ class TestCompletionTrigger:
 
         # Complete it
         await service.update_instance_status(
-            first_instance.id, InstanceStatus.COMPLETED, "arya"
+            first_instance.id, InstanceStatus.COMPLETED, _MEMBER_ARYA
         )
 
         # Should have generated a new instance for the next period
@@ -860,9 +849,10 @@ class TestConditionalChores:
             id=cond1_master_id,
             name="Conditional Chore",
             category_id=_CAT_KITCHEN,
-            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            frequency="daily",
+            due_time="18:00",
             conditions={"logic": "and", "conditions": []},
-            created_by="faiyaz",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service_with_evaluator.create_master_chore(master, tag_ids=[])
 
@@ -870,8 +860,8 @@ class TestConditionalChores:
         association = ChoreAssociation(
             id=cond1_assoc_id,
             master_chore_id=cond1_master_id,
-            member_id="arya",
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         await service_with_evaluator.create_association(association)
 
@@ -894,9 +884,10 @@ class TestConditionalChores:
             id=cond2_master_id,
             name="Conditional Chore Not Met",
             category_id=_CAT_KITCHEN,
-            recurrence_rule={"frequency": "daily", "time": "18:00"},
+            frequency="daily",
+            due_time="18:00",
             conditions={"logic": "and", "conditions": []},
-            created_by="faiyaz",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service_with_evaluator.create_master_chore(master, tag_ids=[])
 
@@ -904,8 +895,8 @@ class TestConditionalChores:
         association = ChoreAssociation(
             id=cond2_assoc_id,
             master_chore_id=cond2_master_id,
-            member_id="arya",
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         await service_with_evaluator.create_association(association)
 
@@ -926,8 +917,9 @@ class TestConditionalChores:
             id=cond3_master_id,
             name="Non-conditional Chore",
             category_id=_CAT_KITCHEN,
-            recurrence_rule={"frequency": "daily", "time": "18:00"},
-            created_by="faiyaz",
+            frequency="daily",
+            due_time="18:00",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service_with_evaluator.create_master_chore(master, tag_ids=[])
 
@@ -935,8 +927,8 @@ class TestConditionalChores:
         association = ChoreAssociation(
             id=cond3_assoc_id,
             master_chore_id=cond3_master_id,
-            member_id="arya",
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         await service_with_evaluator.create_association(association)
 
@@ -1003,8 +995,9 @@ class TestCollaborativeGeneration:
             name="Collaborative Generation",
             category_id=_CAT_KITCHEN,
             is_collaborative=True,
-            recurrence_rule={"frequency": "daily", "time": "18:00"},
-            created_by="faiyaz",
+            frequency="daily",
+            due_time="18:00",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_master_chore(master, tag_ids=[])
 
@@ -1013,8 +1006,8 @@ class TestCollaborativeGeneration:
         assoc1 = ChoreAssociation(
             id=collab_gen_assoc1_id,
             master_chore_id=collab_gen_master_id,
-            member_id="arya",
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_association(assoc1)
 
@@ -1022,8 +1015,8 @@ class TestCollaborativeGeneration:
         assoc2 = ChoreAssociation(
             id=collab_gen_assoc2_id,
             master_chore_id=collab_gen_master_id,
-            member_id="raya",
-            created_by="faiyaz",
+            member_id=_MEMBER_RAYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_association(assoc2)
 
@@ -1049,8 +1042,9 @@ class TestOpenPoolGeneration:
             id=pool_master_id,
             name="Open Pool Generation",
             category_id=_CAT_KITCHEN,
-            recurrence_rule={"frequency": "daily", "time": "18:00"},
-            created_by="faiyaz",
+            frequency="daily",
+            due_time="18:00",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_master_chore(master, tag_ids=[])
 
@@ -1060,8 +1054,7 @@ class TestOpenPoolGeneration:
             id=pool_assoc_id,
             master_chore_id=pool_master_id,
             member_id=None,  # Open pool
-            is_open_pool=True,
-            created_by="faiyaz",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_association(assoc)
 
@@ -1069,8 +1062,8 @@ class TestOpenPoolGeneration:
         instances = await service.get_instances(master_chore_id=pool_master_id)
         assert len(instances) == 1
         assert instances[0].association_id == pool_assoc_id
-        # Open pool instances have no claimed_by initially
-        assert instances[0].claimed_by is None
+        # Open pool instances have no member_id initially
+        assert instances[0].member_id is None
 
 
 class TestOneTimeChoreGeneration:
@@ -1081,14 +1074,13 @@ class TestOneTimeChoreGeneration:
         self, service: ChoresService
     ) -> None:
         """Test that one-time chore generates an instance when associated."""
-        # Create one-time master (no recurrence_rule)
+        # Create one-time master (default frequency is 'once')
         once_master_id = uuid7()
         master = MasterChore(
             id=once_master_id,
             name="One-Time Chore",
             category_id=_CAT_KITCHEN,
-            recurrence_rule=None,  # One-time
-            created_by="faiyaz",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_master_chore(master, tag_ids=[])
 
@@ -1097,9 +1089,8 @@ class TestOneTimeChoreGeneration:
         assoc = ChoreAssociation(
             id=once_assoc_id,
             master_chore_id=once_master_id,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_association(assoc)
 
@@ -1109,22 +1100,19 @@ class TestOneTimeChoreGeneration:
         assert instances[0].master_chore_id == once_master_id
         assert instances[0].association_id == once_assoc_id
         assert instances[0].status == InstanceStatus.ACTIVE
-        assert instances[0].assigned_to == "arya"
+        assert instances[0].member_id == _MEMBER_ARYA
 
     @pytest.mark.asyncio
     async def test_one_time_uses_due_date(self, service: ChoresService) -> None:
         """Test that one-time chore uses due_date for period."""
-        from datetime import date
-
         future_date = date(2027, 6, 15)
         once_master_id = uuid7()
         master = MasterChore(
             id=once_master_id,
             name="One-Time with Due Date",
             category_id=_CAT_KITCHEN,
-            recurrence_rule=None,
             due_date=future_date,
-            created_by="faiyaz",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_master_chore(master, tag_ids=[])
 
@@ -1132,9 +1120,8 @@ class TestOneTimeChoreGeneration:
         assoc = ChoreAssociation(
             id=once_assoc_id,
             master_chore_id=once_master_id,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_association(assoc)
 
@@ -1153,9 +1140,8 @@ class TestOneTimeChoreGeneration:
             id=once_master_id,
             name="One-Time Single",
             category_id=_CAT_KITCHEN,
-            recurrence_rule=None,
             occurrence_count=1,  # Already generated
-            created_by="faiyaz",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_master_chore(master, tag_ids=[])
 
@@ -1163,9 +1149,8 @@ class TestOneTimeChoreGeneration:
         assoc = ChoreAssociation(
             id=once_assoc_id,
             master_chore_id=once_master_id,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         # Create association directly (bypasses generation trigger)
         await service.repository.create_association(assoc)
@@ -1188,8 +1173,7 @@ class TestOneTimeChoreGeneration:
             id=once_master_id,
             name="One-Time Safety Net",
             category_id=_CAT_KITCHEN,
-            recurrence_rule=None,
-            created_by="faiyaz",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_master_chore(master, tag_ids=[])
 
@@ -1197,9 +1181,8 @@ class TestOneTimeChoreGeneration:
         assoc = ChoreAssociation(
             id=once_assoc_id,
             master_chore_id=once_master_id,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
         # Create association directly (bypasses generation trigger)
         await service.repository.create_association(assoc)
@@ -1231,8 +1214,9 @@ class TestAssociationAutoClaimAssign:
             id=claim_master_id,
             name="Auto Claim Test",
             category_id=_CAT_KITCHEN,
-            recurrence_rule={"frequency": "daily", "time": "18:00"},
-            created_by="faiyaz",
+            frequency="daily",
+            due_time="18:00",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_master_chore(master, tag_ids=[])
 
@@ -1240,9 +1224,8 @@ class TestAssociationAutoClaimAssign:
         association = ChoreAssociation(
             id=claim_assoc_id,
             master_chore_id=claim_master_id,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
 
         created, instance = await service.create_association(
@@ -1251,8 +1234,7 @@ class TestAssociationAutoClaimAssign:
 
         assert created.id == claim_assoc_id
         assert instance is not None
-        assert instance.claimed_by == "arya"
-        assert instance.assigned_to is None
+        assert instance.member_id == _MEMBER_ARYA
         assert instance.assigned_by is None
 
     @pytest.mark.asyncio
@@ -1265,8 +1247,9 @@ class TestAssociationAutoClaimAssign:
             id=assign_master_id,
             name="Auto Assign Test",
             category_id=_CAT_KITCHEN,
-            recurrence_rule={"frequency": "daily", "time": "18:00"},
-            created_by="faiyaz",
+            frequency="daily",
+            due_time="18:00",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_master_chore(master, tag_ids=[])
 
@@ -1274,21 +1257,19 @@ class TestAssociationAutoClaimAssign:
         association = ChoreAssociation(
             id=assign_assoc_id,
             master_chore_id=assign_master_id,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
 
         created, instance = await service.create_association(
             association,
-            auto_assign={"assigner_id": "trisha"},
+            auto_assign={"assigner_id": _MEMBER_TRISHA},
         )
 
         assert created.id == assign_assoc_id
         assert instance is not None
-        assert instance.assigned_to == "arya"
-        assert instance.assigned_by == "trisha"
-        assert instance.claimed_by is None
+        assert instance.member_id == _MEMBER_ARYA
+        assert instance.assigned_by == _MEMBER_TRISHA
 
     @pytest.mark.asyncio
     async def test_create_association_without_auto_flags(
@@ -1300,8 +1281,9 @@ class TestAssociationAutoClaimAssign:
             id=backward_master_id,
             name="Backward Compat Test",
             category_id=_CAT_KITCHEN,
-            recurrence_rule={"frequency": "daily", "time": "18:00"},
-            created_by="faiyaz",
+            frequency="daily",
+            due_time="18:00",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_master_chore(master, tag_ids=[])
 
@@ -1309,18 +1291,16 @@ class TestAssociationAutoClaimAssign:
         association = ChoreAssociation(
             id=backward_assoc_id,
             master_chore_id=backward_master_id,
-            member_id="arya",
-            is_open_pool=False,
-            created_by="faiyaz",
+            member_id=_MEMBER_ARYA,
+            created_by=_MEMBER_FAIYAZ,
         )
 
         created, instance = await service.create_association(association)
 
         assert created.id == backward_assoc_id
         assert instance is not None
-        # For member associations, instance is pre-populated with claimed_by/assigned_to
-        assert instance.claimed_by == "arya"
-        assert instance.assigned_to == "arya"
+        # For member associations, instance is pre-populated with member_id
+        assert instance.member_id == _MEMBER_ARYA
 
     @pytest.mark.asyncio
     async def test_create_association_auto_claim_open_pool_no_effect(
@@ -1332,8 +1312,9 @@ class TestAssociationAutoClaimAssign:
             id=pool_master_id,
             name="Open Pool Auto Claim",
             category_id=_CAT_KITCHEN,
-            recurrence_rule={"frequency": "daily", "time": "18:00"},
-            created_by="faiyaz",
+            frequency="daily",
+            due_time="18:00",
+            created_by=_MEMBER_FAIYAZ,
         )
         await service.create_master_chore(master, tag_ids=[])
 
@@ -1342,8 +1323,7 @@ class TestAssociationAutoClaimAssign:
             id=pool_assoc_id,
             master_chore_id=pool_master_id,
             member_id=None,
-            is_open_pool=True,
-            created_by="faiyaz",
+            created_by=_MEMBER_FAIYAZ,
         )
 
         # auto_claim=True but member_id=None — should not claim
@@ -1353,5 +1333,4 @@ class TestAssociationAutoClaimAssign:
 
         assert created.id == pool_assoc_id
         assert instance is not None
-        assert instance.claimed_by is None
-        assert instance.assigned_to is None
+        assert instance.member_id is None
