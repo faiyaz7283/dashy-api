@@ -98,6 +98,7 @@ async def get_calendar(
         # Fetch events from all family member calendars
         all_events = []
         fetch_timestamp = datetime.now(UTC).isoformat()
+        failed_members = []
 
         for member in family_members_list:
             try:
@@ -127,6 +128,7 @@ async def get_calendar(
 
             except Exception as e:
                 logger.error("calendar_fetch_error", member=member.name, error=str(e))
+                failed_members.append(member.name)
 
                 # Track per-member failure metadata (use stale TTL so metadata persists with data)
                 member_meta_key = f"calendar:member_meta:{member.id}:{fetch_timestamp[:10]}"
@@ -141,6 +143,15 @@ async def get_calendar(
                     ttl=settings.CALENDAR_STALE_TTL,
                 )
                 continue
+
+        # If ALL members failed, raise an exception to prevent caching empty data
+        # This preserves the SWR pattern - stale data will continue to be served
+        if len(failed_members) == len(family_members_list):
+            from app.core.exceptions import UpstreamServiceError
+            raise UpstreamServiceError(
+                f"All calendar fetches failed: {', '.join(failed_members)}",
+                service_name="google-calendar",
+            )
 
         # Deduplicate events (merge shared events from multiple calendars)
         deduplicated_events = deduplicate_events(all_events)
