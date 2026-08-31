@@ -240,7 +240,9 @@ class Cache:
             )
             # Trigger background refresh (don't wait for it)
             asyncio.create_task(
-                self._background_refresh(key, fetcher, fresh_ttl, stale_ttl, retry_config, service_name)
+                self._background_refresh(
+                    key, fetcher, fresh_ttl, stale_ttl, retry_config, service_name
+                )
             )
             return stale_data
 

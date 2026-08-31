@@ -86,7 +86,7 @@ class <Domain>DB(SQLModel, table=True):
 ### 3. Generate Alembic migration
 
 ```bash
-docker compose -f compose/docker-compose.dev.yml exec -T api alembic revision --autogenerate -m "add_<domain>s_table"
+docker compose -f compose/docker-compose.dev.yml exec -T api uv run alembic revision --autogenerate -m "add_<domain>s_table"
 ```
 
 Review the generated migration in `alembic/versions/<hash>_add_<domain>s_table.py`:
@@ -112,7 +112,7 @@ def downgrade() -> None:
 ### 4. Apply migration
 
 ```bash
-docker compose -f compose/docker-compose.dev.yml exec -T api alembic upgrade head
+docker compose -f compose/docker-compose.dev.yml exec -T api uv run alembic upgrade head
 ```
 
 ### 5. Create repository implementation
@@ -425,7 +425,7 @@ make lint-api && make build-api && make test-api
 ## Example: Adding "shopping list" repository
 
 1. Add `ShoppingListDB` SQLModel to `persistence/models.py`
-2. Generate migration: `docker compose -f compose/docker-compose.dev.yml exec -T api alembic revision --autogenerate -m "add_shopping_lists"`
+2. Generate migration: `docker compose -f compose/docker-compose.dev.yml exec -T api uv run alembic revision --autogenerate -m "add_shopping_lists"`
 3. Create `app/infrastructure/persistence/shopping_list_repository.py`
 4. Implement `ListRepository` Protocol
 5. Add `get_shopping_list_repository()` to container

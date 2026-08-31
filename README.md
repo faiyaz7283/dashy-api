@@ -22,6 +22,8 @@ Dashy API provides REST endpoints for weather data, calendar events, family memb
 GET /api/v1/weather?units=imperial     → WeatherResponse
 GET /api/v1/calendar?start_date=...&end_date=...  → WeekCalendar
 GET /api/v1/family                     → FamilyMember[]
+GET /api/v1/config                     → { timezone }
+GET /api/v1/metrics                    → SystemMetrics
 GET /api/v1/chores/masters             → ChoreMaster[]
 GET /api/v1/chores/instances           → ChoreInstance[]
 GET /api/v1/chores/categories          → ChoreCategory[]

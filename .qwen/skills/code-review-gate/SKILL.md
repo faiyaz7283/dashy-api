@@ -161,7 +161,7 @@ find tests/ -name "*.py" -newer app/ | head -20
 - [ ] New repository methods have integration tests
 - [ ] New API endpoints have API tests
 - [ ] Tests follow three-tier strategy
-- [ ] Test isolation maintained (tests use `test.db`)
+- [ ] Test isolation maintained (tests use `dashy_test` database)
 - [ ] Edge cases covered (boundaries, empty inputs, error conditions)
 
 ### 5. Check for Magic Numbers/Strings

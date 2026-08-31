@@ -129,7 +129,7 @@ find tests/ -name "*.py" | grep -E "(test_|_test\.py)"
 - [ ] New repository methods have integration tests (`tests/integration/`)
 - [ ] New API endpoints have API tests (`tests/api/`)
 - [ ] Tests follow three-tier strategy (unit, integration, API)
-- [ ] Test isolation maintained (tests use `test.db`, not `dashy.db`)
+- [ ] Test isolation maintained (tests use `dashy_test` database, not the dev database)
 - [ ] No tests modify the development database
 
 ### 9. Check for Magic Numbers/Strings
