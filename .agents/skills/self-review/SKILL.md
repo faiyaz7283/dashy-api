@@ -1,6 +1,8 @@
 ---
 name: self-review
 description: Run this checklist before presenting code to the user. Self-review against AGENTS.md rules to catch violations before they're seen.
+metadata:
+  origin: community
 ---
 
 # Self-Review Checklist

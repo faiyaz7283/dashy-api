@@ -1,6 +1,8 @@
 ---
 name: quality-gate
 description: Run the backend quality gate — lint, typecheck, test, build
+metadata:
+  origin: community
 ---
 
 # Backend Quality Gate

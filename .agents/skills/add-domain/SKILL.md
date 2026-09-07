@@ -1,6 +1,8 @@
 ---
 name: add-domain
 description: Create a complete new domain following Dashy's domain-driven architecture — domain layer, infrastructure adapters, API models, routes, DI wiring, and tests.
+metadata:
+  origin: community
 ---
 
 # Add Domain

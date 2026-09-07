@@ -1,6 +1,8 @@
 ---
 name: add-api-model
 description: Add request/response Pydantic models for API endpoints — define schemas, validation, and serialization.
+metadata:
+  origin: community
 ---
 
 # Add API Model

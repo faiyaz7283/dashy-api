@@ -1,6 +1,8 @@
 ---
 name: add-repository
 description: Create a new repository for database persistence — implement Protocol, add SQLModel, create Alembic migration, and wire into DI container.
+metadata:
+  origin: community
 ---
 
 # Add Repository

@@ -1,6 +1,8 @@
 ---
 name: add-backend-test
 description: Workflow for adding backend tests following Dashy's three-tier testing strategy (unit, integration, API).
+metadata:
+  origin: community
 ---
 
 # Add Backend Test

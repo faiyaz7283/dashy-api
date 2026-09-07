@@ -1,6 +1,8 @@
 ---
 name: add-calendar-source
 description: Add a new calendar provider (Apple Calendar, CalDAV, etc.) — implement CalendarProvider Protocol with authentication and event fetching.
+metadata:
+  origin: community
 ---
 
 # Add Calendar Source

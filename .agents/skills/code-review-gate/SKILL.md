@@ -1,6 +1,8 @@
 ---
 name: code-review-gate
 description: Manual code review before running automated quality gates. Check for pattern violations, code quality, and AGENTS.md compliance.
+metadata:
+  origin: community
 ---
 
 # Code Review Gate

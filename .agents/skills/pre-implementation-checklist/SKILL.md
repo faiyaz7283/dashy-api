@@ -1,6 +1,8 @@
 ---
 name: pre-implementation-checklist
 description: Run this checklist before writing any implementation code to catch violations early. Preventive, not detective.
+metadata:
+  origin: community
 ---
 
 # Pre-Implementation Checklist

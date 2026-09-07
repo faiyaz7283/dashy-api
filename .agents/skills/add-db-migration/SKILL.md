@@ -1,6 +1,8 @@
 ---
 name: add-db-migration
 description: Workflow for creating and applying Alembic database migrations for Dashy's PostgreSQL database.
+metadata:
+  origin: community
 ---
 
 # Add Database Migration

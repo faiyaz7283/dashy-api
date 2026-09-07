@@ -1,6 +1,8 @@
 ---
 name: add-cache-layer
 description: Add Redis caching to an API endpoint — implement cache-aside pattern with TTL and fail-open design.
+metadata:
+  origin: community
 ---
 
 # Add Cache Layer

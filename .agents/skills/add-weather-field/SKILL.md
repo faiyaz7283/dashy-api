@@ -1,6 +1,8 @@
 ---
 name: add-weather-field
 description: Add a new field to weather data (e.g., air quality, pollen count, UV index) — update domain models, adapters, API models, and tests.
+metadata:
+  origin: community
 ---
 
 # Add Weather Field

@@ -1,6 +1,8 @@
 ---
 name: add-provider-adapter
 description: Implement a new provider adapter for an existing domain — e.g., a new weather API, calendar source, or other external integration.
+metadata:
+  origin: community
 ---
 
 # Add Provider Adapter

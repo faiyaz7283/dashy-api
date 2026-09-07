@@ -1,6 +1,8 @@
 ---
 name: add-api-endpoint
 description: Step-by-step workflow for adding a new REST API endpoint following Dashy's domain-driven architecture.
+metadata:
+  origin: community
 ---
 
 # Add API Endpoint
