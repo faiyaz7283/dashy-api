@@ -61,6 +61,8 @@ async def setup_test_database(ensure_test_database):
     tables exist in the test PostgreSQL database with the current schema.
     Seeds the database with test family members for tests that need them.
     """
+    from uuid6 import uuid7
+
     from app.core.database import create_db_and_tables, dispose_engine, get_async_session_factory
     from app.domain.family.models import FamilyMember
     from app.infrastructure.persistence.family_repository import FamilyRepositoryImpl
@@ -75,6 +77,7 @@ async def setup_test_database(ensure_test_database):
             test_members = [
                 FamilyMember(
                     id="faiyaz",
+                    uuid=uuid7(),
                     name="Faiyaz",
                     email="faiyaz@test.com",
                     color="#4A90E2",
@@ -82,6 +85,7 @@ async def setup_test_database(ensure_test_database):
                 ),
                 FamilyMember(
                     id="trisha",
+                    uuid=uuid7(),
                     name="Trisha",
                     email="trisha@test.com",
                     color="#E24A8D",

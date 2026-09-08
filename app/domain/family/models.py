@@ -5,6 +5,7 @@ Domain entities representing family members.
 
 from dataclasses import dataclass, field
 from datetime import date
+from uuid import UUID
 
 
 @dataclass
@@ -17,6 +18,7 @@ class FamilyMember:
 
     Attributes:
         id: Unique business identifier (member key, e.g. "faiyaz").
+        uuid: Database UUID primary key.
         name: Display name.
         email: Email address (also used as Google Calendar ID).
         color: Hex color code for UI color-coding.
@@ -26,6 +28,7 @@ class FamilyMember:
     """
 
     id: str
+    uuid: UUID
     name: str
     email: str
     color: str

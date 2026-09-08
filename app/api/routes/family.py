@@ -6,6 +6,7 @@ used across all features (calendar, rewards, permissions, etc.).
 """
 
 from fastapi import APIRouter, HTTPException
+from uuid6 import uuid7
 
 from app.api.deps import FamilyServiceDep
 from app.api.models.family import FamilyMember
@@ -25,6 +26,7 @@ def _to_response(member: DomainFamilyMember) -> FamilyMember:
         Pydantic response model.
     """
     return FamilyMember(
+        id=member.uuid,
         name=member.name,
         key=member.id,
         email=member.email,
@@ -74,6 +76,7 @@ async def create_family_member(
 
     member = DomainFamilyMember(
         id=body.key,
+        uuid=uuid7(),
         name=body.name,
         email=body.email,
         color=body.color,
@@ -129,6 +132,7 @@ async def replace_family_member(
     """
     member = DomainFamilyMember(
         id=member_key,
+        uuid=uuid7(),
         name=body.name,
         email=body.email,
         color=body.color,
@@ -167,6 +171,7 @@ async def update_family_member(
 
     updated = DomainFamilyMember(
         id=existing.id,
+        uuid=existing.uuid,
         name=body.name if body.name is not None else existing.name,
         email=body.email if body.email is not None else existing.email,
         color=body.color if body.color is not None else existing.color,

@@ -92,7 +92,7 @@ class FamilyRepositoryImpl(FamilyRepository):
     def _to_domain(self, db_member: FamilyMemberDB) -> FamilyMember:
         """Convert database model to domain model.
 
-        Maps DB ``key`` → domain ``id``.
+        Maps DB ``key`` → domain ``id``, DB ``id`` → domain ``uuid``.
 
         Args:
             db_member: Database row.
@@ -102,6 +102,7 @@ class FamilyRepositoryImpl(FamilyRepository):
         """
         return FamilyMember(
             id=db_member.key,
+            uuid=db_member.id,
             name=db_member.name,
             email=db_member.email,
             color=db_member.color,
@@ -113,7 +114,7 @@ class FamilyRepositoryImpl(FamilyRepository):
     def _to_db(self, member: FamilyMember) -> FamilyMemberDB:
         """Convert domain model to database model.
 
-        Maps domain ``id`` → DB ``key``.
+        Maps domain ``id`` → DB ``key``, domain ``uuid`` → DB ``id``.
 
         Args:
             member: Domain entity.
@@ -122,6 +123,7 @@ class FamilyRepositoryImpl(FamilyRepository):
             Database model ready for insertion.
         """
         return FamilyMemberDB(
+            id=member.uuid,
             key=member.id,
             name=member.name,
             email=member.email,

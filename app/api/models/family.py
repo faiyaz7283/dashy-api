@@ -4,6 +4,7 @@ Pydantic models for family API requests and responses.
 """
 
 from datetime import date
+from uuid import UUID
 
 from pydantic import BaseModel
 
@@ -12,6 +13,7 @@ class FamilyMember(BaseModel):
     """A family member with display preferences and personal info.
 
     Attributes:
+        id: Database UUID primary key (used as FK in chores/rewards).
         name: Display name.
         key: Unique identifier for the family member.
         email: Email address (also used as Google Calendar ID).
@@ -21,6 +23,7 @@ class FamilyMember(BaseModel):
         relation: Optional relationship label (e.g. "father", "daughter").
     """
 
+    id: UUID
     name: str
     key: str
     email: str

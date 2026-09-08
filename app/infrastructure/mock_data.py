@@ -5,6 +5,7 @@ when real API credentials are not available or in development mode.
 """
 
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 from app.api.models.family import FamilyMember
 from app.api.models.weather import WeatherResponse
@@ -18,6 +19,7 @@ def get_mock_family_members() -> list[FamilyMember]:
     """
     return [
         FamilyMember(
+            id=UUID("00000000-0000-0000-0000-000000000001"),
             name="Faiyaz",
             key="faiyaz",
             email="faiyaz7283@gmail.com",
@@ -26,6 +28,7 @@ def get_mock_family_members() -> list[FamilyMember]:
             relation="father",
         ),
         FamilyMember(
+            id=UUID("00000000-0000-0000-0000-000000000002"),
             name="Trisha",
             key="trisha",
             email="humairaabbasi26@gmail.com",
@@ -34,6 +37,7 @@ def get_mock_family_members() -> list[FamilyMember]:
             relation="mother",
         ),
         FamilyMember(
+            id=UUID("00000000-0000-0000-0000-000000000003"),
             name="Arya",
             key="arya",
             email="aryahaider1210@gmail.com",
@@ -42,6 +46,7 @@ def get_mock_family_members() -> list[FamilyMember]:
             relation="daughter",
         ),
         FamilyMember(
+            id=UUID("00000000-0000-0000-0000-000000000004"),
             name="Raya",
             key="raya",
             email="rayahaider23@gmail.com",

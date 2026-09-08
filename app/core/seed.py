@@ -5,6 +5,8 @@ is configured in the environment, seeds the database with those members.
 After seeding, the database becomes the single source of truth.
 """
 
+from uuid6 import uuid7
+
 from app.config import settings
 from app.core.database import get_async_session_factory
 from app.core.logging import get_logger
@@ -45,6 +47,7 @@ async def seed_family_members_if_empty() -> None:
         for config_member in config_members:
             member = FamilyMember(
                 id=config_member.key,
+                uuid=uuid7(),
                 name=config_member.name,
                 email=config_member.email,
                 color=config_member.color,
