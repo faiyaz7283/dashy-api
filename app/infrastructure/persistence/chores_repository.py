@@ -601,7 +601,6 @@ class ChoresRepositoryImpl:
             .where(
                 ChoreInstanceDB.association_id == association_id,
                 ChoreInstanceDB.period_start == period_start,
-                ChoreInstanceDB.status != InstanceStatus.ARCHIVED.value,
             )
         )
         result = await self.session.execute(statement)
