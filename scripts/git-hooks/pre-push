@@ -1,0 +1,15 @@
+#!/usr/bin/env sh
+# Full gate mirroring AGENTS.md section 3 (lint/test) for the API side.
+# Docker-first: routes through the running api container, never bare uv on host.
+# Tracked in git (not .git/hooks) so it travels across machines; activate per-clone with:
+#   git config core.hooksPath scripts/git-hooks
+COMPOSE="../compose/docker-compose.dev.yml"
+
+if ! docker compose -f "$COMPOSE" ps api 2>/dev/null | grep -q "Up"; then
+  echo "dashy-dev-api container not running - skipping quality gate (run 'make dev-up' to enable this check)" >&2
+  exit 0
+fi
+
+set -e
+docker compose -f "$COMPOSE" exec -T api uv run ruff check app/ tests/
+docker compose -f "$COMPOSE" exec -T -e POSTGRES_DB=dashy_test -e POSTGRES_USER=dashy_test -e POSTGRES_PASSWORD=test_password api uv run pytest tests/ -v
