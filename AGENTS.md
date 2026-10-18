@@ -69,7 +69,11 @@ All three must pass before you tell the user the task is complete. (API has no s
 - Do not run `git commit`, `git push`, `git reset`, `git rebase`, or other git mutations unless the user explicitly asks.
 - Ask for confirmation before each git mutation, even if confirmed earlier in the conversation.
 - Keep commits atomic and write messages that describe "why," not just "what."
-- Include `Co-Authored-By: Qwen <noreply@qwen.ai>` in AI-assisted commits.
+- Agent-assisted commits carry **no** `Co-Authored-By` and **no** `Signed-off-by`
+  trailer naming the agent. Authorship and the DCO certification belong to the
+  human who reviews and commits the change, and a tool can certify neither.
+- Disclose agent assistance with a single `Assisted-by` trailer instead, of the
+  form `Assisted-by: <agent>/<model-id>`, for example `Assisted-by: warp/auto`.
 
 ## 4. Backend code standards
 
